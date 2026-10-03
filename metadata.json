@@ -1,0 +1,6 @@
+{
+  "name": "بُنيان - متابعة مهام المقاولات",
+  "description": "منظومة إدارة ومتابعة مهام مشاريع المقاولات بسلاسل الخطوات التفاعلية وتنبيهات المسؤولين ونسب الإنجاز وتواريخ الإغلاق المتوقعة",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
