@@ -14,6 +14,9 @@ import { Task, Project, TeamMember } from '../types';
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
+// معرف الشيت الأساسي المركزي
+const DEFAULT_SPREADSHEET_ID = "1BwUY_4bPsLepwxFlnst1c9Yyp9gosoVIsy-tvH9Au5c";
+
 // Provider with Google Sheets & Drive Scopes
 const provider = new GoogleAuthProvider();
 provider.addScope('https://www.googleapis.com/auth/spreadsheets');
@@ -213,14 +216,17 @@ export async function exportTasksToGoogleSheets(
 /**
  * Reads data from an existing Google Sheet by ID or URL
  */
-export async function readTasksFromGoogleSheets(sheetIdOrUrl: string): Promise<any[][]> {
+export async function readTasksFromGoogleSheets(sheetIdOrUrl?: string): Promise<any[][]> {
+  // استخدام الشيت الأساسي المركزي إذا لم يتم إدخال رابط يدوياً
+  const targetInput = (sheetIdOrUrl && sheetIdOrUrl.trim() !== '') ? sheetIdOrUrl : DEFAULT_SPREADSHEET_ID;
+  
   const token = getAccessToken();
   if (!token) {
     throw new Error('يرجى تسجيل الدخول بحساب Google أولاً للمتابعة');
   }
 
-  // Extract ID from URL if full URL is passed
-  let spreadsheetId = sheetIdOrUrl.trim();
+  // استخراج الـ ID من الرابط إذا تم تمرير الرابط كاملاً
+  let spreadsheetId = targetInput.trim();
   const match = spreadsheetId.match(/\/d\/([a-zA-Z0-9-_]+)/);
   if (match) {
     spreadsheetId = match[1];
