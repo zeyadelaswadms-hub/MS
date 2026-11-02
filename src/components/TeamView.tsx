@@ -4,7 +4,8 @@ import {
   getDeadlineInfo, 
   getActiveWaitingSubtask, 
   createWhatsAppAlertLink,
-  createMemberAllPendingTasksWhatsAppLink
+  createMemberAllPendingTasksWhatsAppLink,
+  cleanPhoneNumberForWhatsApp
 } from '../utils/dateUtils';
 import { 
   Users, 
@@ -384,11 +385,10 @@ export const TeamView: React.FC<TeamViewProps> = ({
           );
 
           // General chat WhatsApp URL
-          let cleanPhone = member.phone.replace(/[\s\-\(\)]/g, '');
-          if (cleanPhone.startsWith('01') && cleanPhone.length === 11) cleanPhone = '2' + cleanPhone;
-          else if (cleanPhone.startsWith('05') && cleanPhone.length === 10) cleanPhone = '966' + cleanPhone.substring(1);
-          if (cleanPhone.startsWith('+')) cleanPhone = cleanPhone.substring(1);
-          const whatsappGeneralUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(`السلام عليكم م. ${member.name}، تحية طيبة من شركة محمد سعد لأعمال المرافق والإنشاءات.`)}`;
+          const cleanPhone = cleanPhoneNumberForWhatsApp(member.phone);
+          const whatsappGeneralUrl = cleanPhone
+            ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(`السلام عليكم م. ${member.name}، تحية طيبة من شركة محمد سعد لأعمال المرافق والإنشاءات.`)}`
+            : `https://api.whatsapp.com/send?text=${encodeURIComponent(`السلام عليكم م. ${member.name}، تحية طيبة من شركة محمد سعد لأعمال المرافق والإنشاءات.`)}`;
 
           return (
             <div

@@ -49,7 +49,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Brand Logo & Title (شركة محمد سعد مع الشعار الجديد) */}
             <div className="flex items-center gap-2 shrink-0 min-w-0">
               <img 
-                src="/assets/aistudio/Gemini_Generated_Image_ce6yamce6yamce6y_52c06c09.jfif"
+                src="/assets/aistudio/icon-192.png"
                 alt="شعار شركة محمد سعد"
                 className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl object-cover ring-1 ring-cyan-400/40 shadow-md shrink-0"
               />

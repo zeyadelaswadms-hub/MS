@@ -154,21 +154,40 @@ export function getActiveWaitingSubtask(
 }
 
 /**
- * Clean phone number for WhatsApp: supports Saudi (+966), Egypt (+20), and international
+ * Clean phone number for WhatsApp: converts Arabic numerals, supports Egypt (+20), Saudi (+966), and international
  */
-export function cleanPhoneNumberForWhatsApp(phone: string): string {
-  let clean = phone.replace(/[\s\-\(\)\.]/g, '');
+export function cleanPhoneNumberForWhatsApp(rawPhone?: string): string {
+  if (!rawPhone) return '';
+  let phone = String(rawPhone).trim();
+
+  // Convert Arabic-Indic numerals (٠-٩) to standard numerals (0-9)
+  const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+  for (let i = 0; i < 10; i++) {
+    phone = phone.replace(new RegExp(arabicNumerals[i], 'g'), String(i));
+  }
+
+  // Remove spaces, dashes, brackets, periods
+  let clean = phone.replace(/[^0-9+]/g, '');
+
   if (clean.startsWith('+')) {
     clean = clean.substring(1);
   } else if (clean.startsWith('00')) {
     clean = clean.substring(2);
-  } else if ((clean.startsWith('010') || clean.startsWith('011') || clean.startsWith('012') || clean.startsWith('015')) && clean.length === 11) {
-    // Egyptian mobile number (e.g. 01030095004 -> 201030095004)
-    clean = '20' + clean.substring(1);
-  } else if (clean.startsWith('05') && clean.length === 10) {
-    // Saudi mobile number (e.g. 0551234567 -> 966551234567)
-    clean = '966' + clean.substring(1);
   }
+
+  // Egyptian mobile numbers (010, 011, 012, 015 - 11 digits: e.g. 01030095004 -> 201030095004)
+  if (/^01[0125]\d{8}$/.test(clean)) {
+    clean = '20' + clean.substring(1);
+  } else if (/^1[0125]\d{8}$/.test(clean)) {
+    clean = '20' + clean;
+  }
+  // Saudi mobile numbers (05... 10 digits: e.g. 0551234567 -> 966551234567)
+  else if (/^05\d{8}$/.test(clean)) {
+    clean = '966' + clean.substring(1);
+  } else if (/^5\d{8}$/.test(clean)) {
+    clean = '966' + clean;
+  }
+
   return clean;
 }
 
@@ -176,42 +195,42 @@ export function cleanPhoneNumberForWhatsApp(phone: string): string {
  * Builds WhatsApp link with automated pre-filled alert message
  */
 export function createWhatsAppAlertLink(
-  member: TeamMember,
-  task: Task,
-  project?: Project,
+  member?: TeamMember | null,
+  task?: Task | null,
+  project?: Project | null,
   subtask?: SubTask | null,
   deadlineInfo?: DeadlineCalculation
 ): string {
+  if (!member) return '#';
   const cleanPhone = cleanPhoneNumberForWhatsApp(member.phone);
   const projectName = project ? project.name : 'مشروع المقاولات';
-  const stepName = subtask ? subtask.title : task.title;
+  const stepName = subtask ? subtask.title : task ? task.title : 'متابعة العمل';
+  const taskTitle = task ? task.title : 'المهمة';
   const deadlineText = deadlineInfo?.hasDate ? deadlineInfo.badgeText : 'غير محدد';
+  const closingDate = task?.expectedClosingDate || 'قيد المتابعة';
 
   const message = `سلام عليكم م. ${member.name}
 بخصوص مشروع ${projectName}:
-- مهمة: ${task.title} (خطوة: ${stepName})
-موعد التسليم: ${task.expectedClosingDate || 'قيد المتابعة'} (${deadlineText})
+- مهمة: ${taskTitle} (خطوة: ${stepName})
+موعد التسليم: ${closingDate} (${deadlineText})
 يرجى إفادتنا بحالة الإنجاز والاعتماد بالموقع. شاكرين جهودكم.
 شركة محمد سعد`;
 
-  return `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(message)}`;
+  if (cleanPhone) {
+    return `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(message)}`;
+  }
+  return `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
 }
 
 /**
  * Builds concise WhatsApp Digest message alerting the member about ALL pending tasks waiting on him across projects
- * Format requested:
- * سلام عليكم م.فلان
- * بالنسبة لمشروع كذا:
- * - مهمة كذا (خطوة: كذا)
- * ومشروع كذا:
- * - مهمة كذا
  */
-export function createMemberAllPendingTasksWhatsAppLink(
+export function createMemberAllPendingTasksWhatsAppDigest(
   member: TeamMember,
   allTasks: Task[],
   projects: Project[],
-  customHeader?: string
-): { link: string; pendingCount: number; message: string } {
+  customTemplate?: string
+): { link: string; pendingCount: number; message: string; cleanPhone: string } {
   const cleanPhone = cleanPhoneNumberForWhatsApp(member.phone);
 
   // Find all active uncompleted tasks/steps where this member is the active blocker or assignee
@@ -230,84 +249,104 @@ export function createMemberAllPendingTasksWhatsAppLink(
       projectManagerId: '',
       startDate: '',
       expectedEndDate: '',
-      status: 'active',
+      status: 'active' as const,
       color: '#0891b2'
     };
 
-    // Check if member is assigned to a pending/blocked subtask
-    const waitingSubtask = task.subtasks?.find(s => 
+    // Subtasks assigned to this member that are not completed
+    const memberSubtasks = task.subtasks?.filter(s => 
       s.status !== 'completed' && s.assignedMemberId === member.id
-    );
+    ) || [];
 
-    if (waitingSubtask) {
-      pendingItems.push({
-        project: proj,
-        task,
-        stepTitle: waitingSubtask.title,
+    if (memberSubtasks.length > 0) {
+      memberSubtasks.forEach(sub => {
+        pendingItems.push({
+          project: proj,
+          task,
+          stepTitle: sub.title,
+        });
       });
     } else if (task.assignedMemberId === member.id) {
-      // Member is main task manager and no specific subtask assigned
-      const activeWaiting = getActiveWaitingSubtask(task, [member]);
+      // Member is responsible for the overall task
+      const waiting = getActiveWaitingSubtask(task, [member]);
       pendingItems.push({
         project: proj,
         task,
-        stepTitle: activeWaiting.subtask?.title || 'متابعة المهمة والإشراف',
+        stepTitle: waiting.subtask?.title || 'متابعة المهمة والإشراف',
       });
     }
   });
 
-  if (pendingItems.length === 0) {
-    const emptyMsg = `سلام عليكم م. ${member.name}
-نحيطكم علماً بأنه لا توجد مهام أو بنود متوقفة عليكم حالياً في المنظومة.
-شركة محمد سعد`;
-    return {
-      link: `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(emptyMsg)}`,
-      pendingCount: 0,
-      message: emptyMsg
-    };
-  }
-
   // Group items by project
-  const byProject = new Map<string, Array<{ task: Task; stepTitle: string }>>();
+  const byProject = new Map<string, Array<{ taskTitle: string; stepTitle: string }>>();
   pendingItems.forEach(item => {
-    const pName = item.project.name;
+    const pName = item.project.name || 'مشروع عام';
     if (!byProject.has(pName)) {
       byProject.set(pName, []);
     }
-    byProject.get(pName)!.push({ task: item.task, stepTitle: item.stepTitle });
-  });
-
-  // Construct message lines
-  const lines: string[] = [];
-  lines.push(`سلام عليكم م. ${member.name}`);
-  if (customHeader?.trim()) {
-    lines.push(customHeader.trim());
-  } else {
-    lines.push('نرجو التكرم بمتابعة المهام والمتطلبات الميدانية المتوقفة عليكم:');
-  }
-  lines.push('');
-
-  let isFirst = true;
-  byProject.forEach((items, projectName) => {
-    lines.push(`${isFirst ? 'بالنسبة لمشروع' : 'ومشروع'} ${projectName}:`);
-    items.forEach(it => {
-      lines.push(`- مهمة: ${it.task.title} (خطوة: ${it.stepTitle})`);
+    byProject.get(pName)!.push({
+      taskTitle: item.task.title,
+      stepTitle: item.stepTitle,
     });
-    lines.push('');
-    isFirst = false;
   });
 
-  lines.push('شاكرين لكم حسن تعاونكم وسرعة الاستجابة.');
-  lines.push('شركة محمد سعد');
+  // Build task lines
+  const taskLines: string[] = [];
+  let pIdx = 0;
+  byProject.forEach((items, projectName) => {
+    taskLines.push(`${pIdx === 0 ? 'بالنسبة لمشروع' : 'ومشروع'} ${projectName}:`);
+    items.forEach(it => {
+      taskLines.push(`- مهمة: ${it.taskTitle} (خطوة: ${it.stepTitle})`);
+    });
+    taskLines.push('');
+    pIdx++;
+  });
 
-  const fullMessage = lines.join('\n');
-  const link = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(fullMessage)}`;
+  let tasksListStr = taskLines.join('\n').trim();
+  if (!tasksListStr) {
+    tasksListStr = '• لا توجد مهام متوقفة حالياً مسندة إليكم.';
+  }
+
+  let fullMessage = '';
+  if (customTemplate && customTemplate.includes('{tasks_list}')) {
+    fullMessage = customTemplate
+      .replace(/\{name\}/g, member.name)
+      .replace(/\{tasks_list\}/g, tasksListStr);
+  } else {
+    fullMessage = `سلام عليكم م. ${member.name}
+نرجو التكرم بمتابعة المهام والمتطلبات الميدانية المتوقفة عليكم:
+
+${tasksListStr}
+
+شاكرين لكم حسن تعاونكم ومقدرين سرعة الإنجاز.
+شركة محمد سعد لأعمال المرافق والإنشاءات`;
+  }
+
+  let link = '';
+  if (cleanPhone) {
+    link = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(fullMessage)}`;
+  } else {
+    link = `https://api.whatsapp.com/send?text=${encodeURIComponent(fullMessage)}`;
+  }
 
   return {
     link,
     pendingCount: pendingItems.length,
     message: fullMessage,
+    cleanPhone,
   };
+}
+
+/**
+ * Returns the exact string URL for WhatsApp
+ */
+export function createMemberAllPendingTasksWhatsAppLink(
+  member: TeamMember,
+  allTasks: Task[],
+  projects: Project[],
+  customTemplate?: string
+): string {
+  return createMemberAllPendingTasksWhatsAppDigest(member, allTasks, projects, customTemplate).link;
 }
 
 /**
