@@ -423,35 +423,35 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       )}
 
       {/* Top Header Card: Controls & Navigation */}
-      <div className="bg-white rounded-2xl p-3 sm:p-4 border border-stone-200/90 shadow-xs space-y-3">
+      <div className="bg-[#132229] rounded-2xl p-3 sm:p-4 border border-[#1c3542] shadow-md space-y-3 text-white">
         
         {/* Row 1: Month Title & Nav Buttons & View Summary */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           
           {/* Month & Year Title with Navigation */}
           <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-900 flex items-center justify-center shrink-0">
-              <CalendarIcon className="w-5 h-5 text-amber-700" />
+            <div className="w-9 h-9 rounded-xl bg-[#088395]/20 border border-cyan-400/30 text-[#22d3ee] flex items-center justify-center shrink-0">
+              <CalendarIcon className="w-5 h-5 text-[#22d3ee]" />
             </div>
             
             <div className="flex items-center gap-2">
-              <h2 className="text-base sm:text-lg font-black text-stone-900">
+              <h2 className="text-base sm:text-lg font-black text-white">
                 {MONTH_NAMES_AR[month]} {year}
               </h2>
               
-              <div className="flex items-center bg-stone-100 p-0.5 rounded-lg border border-stone-200">
+              <div className="flex items-center bg-[#182c35] p-0.5 rounded-lg border border-[#22404e]">
                 <button
                   type="button"
                   onClick={handleNextMonth}
                   title="الشهر التالي"
-                  className="p-1 text-stone-600 hover:text-stone-900 hover:bg-white rounded transition cursor-pointer"
+                  className="p-1 text-slate-300 hover:text-white hover:bg-[#12222a] rounded transition cursor-pointer"
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>
                 <button
                   type="button"
                   onClick={handleToday}
-                  className="px-2 py-0.5 text-[11px] font-bold text-stone-700 hover:text-stone-950 hover:bg-white rounded transition cursor-pointer"
+                  className="px-2 py-0.5 text-[11px] font-bold text-slate-300 hover:text-white hover:bg-[#12222a] rounded transition cursor-pointer"
                 >
                   اليوم
                 </button>
@@ -459,7 +459,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   type="button"
                   onClick={handlePrevMonth}
                   title="الشهر السابق"
-                  className="p-1 text-stone-600 hover:text-stone-900 hover:bg-white rounded transition cursor-pointer"
+                  className="p-1 text-slate-300 hover:text-white hover:bg-[#12222a] rounded transition cursor-pointer"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
@@ -469,36 +469,36 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
           {/* Quick Summary Badges */}
           <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
-            <span className="bg-stone-100 text-stone-700 px-2.5 py-1 rounded-lg border border-stone-200/80 flex items-center gap-1.5" title="المهام التي تبدأ أو تنتهي هذا الشهر">
-              <CalendarRange className="w-3.5 h-3.5 text-stone-500" />
+            <span className="bg-[#101c22] text-slate-200 px-2.5 py-1 rounded-lg border border-[#1b3440] flex items-center gap-1.5" title="المهام التي تبدأ أو تنتهي هذا الشهر">
+              <CalendarRange className="w-3.5 h-3.5 text-cyan-400" />
               <span>مهام الشهر:</span>
-              <span className="font-mono text-stone-900">{monthStats.monthTotal}</span>
+              <span className="font-mono text-white font-bold">{monthStats.monthTotal}</span>
             </span>
 
-            <span className="bg-emerald-50 text-emerald-800 px-2 py-1 rounded-lg border border-emerald-200 flex items-center gap-1" title="مواعيد بدء المهام هذا الشهر">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            <span className="bg-[#0e2c22] text-emerald-300 px-2 py-1 rounded-lg border border-[#19503e] flex items-center gap-1" title="مواعيد بدء المهام هذا الشهر">
+              <span className="w-2 h-2 rounded-full bg-emerald-400" />
               <span>بدء:</span>
-              <span className="font-mono font-bold text-emerald-950">{monthStats.startingThisMonth}</span>
+              <span className="font-mono font-bold text-emerald-200">{monthStats.startingThisMonth}</span>
             </span>
 
-            <span className="bg-amber-50 text-amber-800 px-2 py-1 rounded-lg border border-amber-200 flex items-center gap-1" title="مواعيد تسليم المهام هذا الشهر">
-              <span className="w-2 h-2 rounded-full bg-amber-500" />
+            <span className="bg-[#2d2211] text-amber-300 px-2 py-1 rounded-lg border border-[#523e1d] flex items-center gap-1" title="مواعيد تسليم المهام هذا الشهر">
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
               <span>تسليم:</span>
-              <span className="font-mono font-bold text-amber-950">{monthStats.endingThisMonth}</span>
+              <span className="font-mono font-bold text-amber-200">{monthStats.endingThisMonth}</span>
             </span>
 
             {monthStats.overdue > 0 && (
-              <span className="bg-red-50 text-red-800 px-2 py-1 rounded-lg border border-red-200 flex items-center gap-1 animate-pulse" title="مهام متأخرة عن موعدها">
-                <AlertTriangle className="w-3 h-3 text-red-600" />
+              <span className="bg-[#311116] text-rose-300 px-2 py-1 rounded-lg border border-[#521b24] flex items-center gap-1 animate-pulse" title="مهام متأخرة عن موعدها">
+                <AlertTriangle className="w-3 h-3 text-rose-400" />
                 <span>متأخرة:</span>
-                <span className="font-mono font-bold text-red-950">{monthStats.overdue}</span>
+                <span className="font-mono font-bold text-rose-200">{monthStats.overdue}</span>
               </span>
             )}
 
             <button
               type="button"
               onClick={() => onOpenCreateTask(selectedProjectId !== 'all' ? selectedProjectId : undefined)}
-              className="bg-amber-500 hover:bg-amber-600 text-stone-950 px-3 py-1.5 rounded-xl font-black flex items-center gap-1.5 transition shadow-2xs cursor-pointer text-xs"
+              className="bg-[#088395] hover:bg-[#0aa0b6] text-white px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition shadow-sm cursor-pointer text-xs border border-cyan-400/30"
             >
               <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
               <span>+ مهمة جديدة</span>
@@ -513,48 +513,48 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             
             {/* Filter by Project */}
-            <div className="flex items-center gap-1 bg-stone-50 border border-stone-200 rounded-lg px-2 py-1">
-              <Building2 className="w-3.5 h-3.5 text-stone-400" />
+            <div className="flex items-center gap-1 bg-[#182c35] border border-[#22404e] rounded-lg px-2 py-1">
+              <Building2 className="w-3.5 h-3.5 text-cyan-400" />
               <select
                 value={selectedProjectId}
                 onChange={(e) => {
                   setSelectedProjectId(e.target.value);
                   if (onSelectProject) onSelectProject(e.target.value);
                 }}
-                className="bg-transparent text-[11px] font-bold text-stone-700 outline-none cursor-pointer"
+                className="bg-transparent text-[11px] font-bold text-white outline-none cursor-pointer"
               >
-                <option value="all">كل المشاريع ({projects.length})</option>
+                <option value="all" className="bg-[#132229] text-white">كل المشاريع ({projects.length})</option>
                 {projects.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
+                  <option key={p.id} value={p.id} className="bg-[#132229] text-white">{p.name}</option>
                 ))}
               </select>
             </div>
 
             {/* Filter by Assignee */}
-            <div className="flex items-center gap-1 bg-stone-50 border border-stone-200 rounded-lg px-2 py-1">
-              <User className="w-3.5 h-3.5 text-stone-400" />
+            <div className="flex items-center gap-1 bg-[#182c35] border border-[#22404e] rounded-lg px-2 py-1">
+              <User className="w-3.5 h-3.5 text-cyan-400" />
               <select
                 value={selectedMemberId}
                 onChange={(e) => setSelectedMemberId(e.target.value)}
-                className="bg-transparent text-[11px] font-bold text-stone-700 outline-none cursor-pointer"
+                className="bg-transparent text-[11px] font-bold text-white outline-none cursor-pointer"
               >
-                <option value="all">كل المسؤولين ({teamMembers.length})</option>
+                <option value="all" className="bg-[#132229] text-white">كل المسؤولين ({teamMembers.length})</option>
                 {teamMembers.map(m => (
-                  <option key={m.id} value={m.id}>{m.name}</option>
+                  <option key={m.id} value={m.id} className="bg-[#132229] text-white">{m.name}</option>
                 ))}
               </select>
             </div>
 
-            {/* Date Display Mode Toggle (مواعيد البدء والانتهاء) */}
-            <div className="flex items-center bg-stone-100 p-0.5 rounded-lg border border-stone-200 text-[11px] font-bold">
-              <span className="text-stone-400 px-1 text-[10px]">العرض:</span>
+            {/* Date Display Mode Toggle */}
+            <div className="flex items-center bg-[#182c35] p-0.5 rounded-lg border border-[#22404e] text-[11px] font-bold">
+              <span className="text-slate-400 px-1 text-[10px]">العرض:</span>
               <button
                 type="button"
                 onClick={() => setDateDisplayMode('all')}
                 className={`px-2 py-0.5 rounded transition cursor-pointer ${
                   dateDisplayMode === 'all'
-                    ? 'bg-white text-stone-900 shadow-2xs font-black'
-                    : 'text-stone-600 hover:text-stone-900'
+                    ? 'bg-[#088395] text-white shadow-2xs font-black'
+                    : 'text-slate-300 hover:text-white'
                 }`}
                 title="عرض مواعيد البدء والانتهاء معاً"
               >
@@ -565,8 +565,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 onClick={() => setDateDisplayMode('deadlines')}
                 className={`px-2 py-0.5 rounded transition cursor-pointer ${
                   dateDisplayMode === 'deadlines'
-                    ? 'bg-white text-stone-900 shadow-2xs font-black'
-                    : 'text-stone-600 hover:text-stone-900'
+                    ? 'bg-[#088395] text-white shadow-2xs font-black'
+                    : 'text-slate-300 hover:text-white'
                 }`}
                 title="عرض مواعيد التسليم والإغلاق فقط"
               >
@@ -577,8 +577,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 onClick={() => setDateDisplayMode('starts')}
                 className={`px-2 py-0.5 rounded transition cursor-pointer ${
                   dateDisplayMode === 'starts'
-                    ? 'bg-white text-stone-900 shadow-2xs font-black'
-                    : 'text-stone-600 hover:text-stone-900'
+                    ? 'bg-[#088395] text-white shadow-2xs font-black'
+                    : 'text-slate-300 hover:text-white'
                 }`}
                 title="عرض مواعيد البدء فقط"
               >
@@ -595,7 +595,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   setStatusFilter('all');
                   setDateDisplayMode('all');
                 }}
-                className="text-[10px] font-bold text-red-600 hover:text-red-800 flex items-center gap-1 transition cursor-pointer"
+                className="text-[10px] font-bold text-rose-400 hover:text-rose-300 flex items-center gap-1 transition cursor-pointer"
               >
                 <RotateCcw className="w-3 h-3" />
                 <span>إعادة ضبط</span>
@@ -604,8 +604,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           </div>
 
           {/* Interactive Drag & Drop Visual Guide */}
-          <div className="flex items-center gap-1.5 text-[11px] font-medium text-amber-900 bg-amber-50 border border-amber-200/80 px-2.5 py-1 rounded-lg">
-            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+          <div className="flex items-center gap-1.5 text-[11px] font-medium text-[#22d3ee] bg-[#0e2c38] border border-[#174e5e] px-2.5 py-1 rounded-lg">
+            <span className="w-2 h-2 rounded-full bg-[#22d3ee] animate-pulse shrink-0" />
             <span>اسحب أي بطاقة مهمة وأفلتها فوق أي يوم لتغيير تاريخها فوراً</span>
           </div>
 
@@ -618,10 +618,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         CALENDAR GRID (7 COLUMNS: SATURDAY TO FRIDAY)
         ========================================================================
       */}
-      <div className="bg-white rounded-2xl border border-stone-200/90 shadow-xs overflow-hidden">
+      <div className="bg-[#132229] rounded-2xl border border-[#1c3542] shadow-md overflow-hidden">
         
         {/* Days of Week Header (Saturday to Friday) */}
-        <div className="grid grid-cols-7 border-b border-stone-200 bg-stone-100/90 text-stone-700 text-xs font-black divide-x divide-x-reverse divide-stone-200 text-center">
+        <div className="grid grid-cols-7 border-b border-[#1c3542] bg-[#101c22] text-slate-300 text-xs font-black divide-x divide-x-reverse divide-[#1c3542] text-center">
           {WEEKDAYS.map(day => (
             <div key={day.id} className="py-2.5 px-1 flex flex-col items-center">
               <span className="hidden sm:inline">{day.label}</span>
@@ -631,7 +631,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         </div>
 
         {/* Days Matrix */}
-        <div className="grid grid-cols-7 divide-x divide-x-reverse divide-y divide-stone-200/80 text-xs bg-stone-50">
+        <div className="grid grid-cols-7 divide-x divide-x-reverse divide-y divide-[#1c3542] text-xs bg-[#132229]">
           {calendarDays.map((cell, index) => {
             const dayEntries = tasksByDate.get(cell.dateStr) || [];
             const isTarget = dragOverDateStr === cell.dateStr;
@@ -656,13 +656,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 }}
                 className={`min-h-[120px] sm:min-h-[145px] p-1.5 sm:p-2 flex flex-col justify-between transition-all duration-150 relative group ${
                   !cell.isCurrentMonth
-                    ? 'bg-stone-100/50 text-stone-400'
+                    ? 'bg-[#0a1217] text-slate-600'
                     : cell.isToday
-                    ? 'bg-amber-50/40 text-stone-900 font-bold'
-                    : 'bg-white text-stone-800'
+                    ? 'bg-[#0f2c38] text-white font-bold'
+                    : 'bg-[#132229] text-slate-200'
                 } ${
                   isTarget 
-                    ? 'ring-2 ring-amber-500 bg-amber-100/90 shadow-md scale-[1.01] z-20' 
+                    ? 'ring-2 ring-[#22d3ee] bg-[#164253] shadow-md scale-[1.01] z-20' 
                     : ''
                 }`}
               >
@@ -672,10 +672,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     <span
                       className={`w-6 h-6 rounded-full flex items-center justify-center font-mono text-xs font-bold ${
                         cell.isToday
-                          ? 'bg-amber-500 text-stone-950 ring-2 ring-amber-400/40'
+                          ? 'bg-[#088395] text-white ring-2 ring-cyan-400'
                           : cell.isCurrentMonth
-                          ? 'text-stone-800'
-                          : 'text-stone-400'
+                          ? 'text-white'
+                          : 'text-slate-600'
                       }`}
                     >
                       {cell.date.getDate()}
@@ -683,7 +683,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
                     {/* Small count pill if many tasks on this day */}
                     {dayEntries.length > 0 && (
-                      <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-stone-100 text-stone-600 border border-stone-200 font-bold">
+                      <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-[#182c35] text-cyan-300 border border-[#22404e] font-bold">
                         {dayEntries.length}
                       </span>
                     )}
@@ -694,7 +694,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     type="button"
                     onClick={() => onOpenCreateTask(selectedProjectId !== 'all' ? selectedProjectId : undefined, cell.dateStr)}
                     title={`إضافة مهمة تبدأ في يوم ${cell.dateStr}`}
-                    className="opacity-0 group-hover:opacity-100 p-0.5 text-stone-400 hover:text-amber-800 rounded transition cursor-pointer"
+                    className="opacity-0 group-hover:opacity-100 p-0.5 text-slate-400 hover:text-cyan-300 rounded transition cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
                   </button>
@@ -714,21 +714,21 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     const isEnd = role === 'end';
                     const isBoth = role === 'both';
 
-                    let cardBorder = 'border-stone-200';
-                    let cardBg = 'bg-stone-50 hover:bg-stone-100';
+                    let cardBorder = 'border-[#1c3542]';
+                    let cardBg = 'bg-[#182c35] hover:bg-[#203a46] text-slate-200';
 
                     if (isCompleted) {
-                      cardBorder = 'border-emerald-300';
-                      cardBg = 'bg-emerald-50/70 hover:bg-emerald-100 text-emerald-950';
+                      cardBorder = 'border-emerald-700/60';
+                      cardBg = 'bg-emerald-950/70 hover:bg-emerald-900/80 text-emerald-200';
                     } else if (isEnd && deadline.isOverdue) {
-                      cardBorder = 'border-red-300';
-                      cardBg = 'bg-red-50/90 hover:bg-red-100 text-red-950';
+                      cardBorder = 'border-red-700/60';
+                      cardBg = 'bg-red-950/80 hover:bg-red-900/90 text-red-200';
                     } else if (isStart) {
-                      cardBorder = 'border-emerald-300';
-                      cardBg = 'bg-emerald-50/60 hover:bg-emerald-100/80 text-emerald-950';
+                      cardBorder = 'border-emerald-700/60';
+                      cardBg = 'bg-emerald-950/60 hover:bg-emerald-900/70 text-emerald-200';
                     } else if (isEnd) {
-                      cardBorder = 'border-amber-300';
-                      cardBg = 'bg-amber-50/80 hover:bg-amber-100 text-amber-950';
+                      cardBorder = 'border-cyan-700/60';
+                      cardBg = 'bg-[#0e3b43] hover:bg-[#134e5a] text-cyan-200';
                     }
 
                     return (
@@ -882,18 +882,18 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         ========================================================================
       */}
       {previewTask && (
-        <div className="fixed inset-0 z-50 bg-stone-950/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white w-full max-w-xl rounded-3xl shadow-2xl border border-stone-200 overflow-hidden animate-scaleUp space-y-0">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-[#132229] w-full max-w-xl rounded-3xl shadow-2xl border border-[#1c3542] overflow-hidden animate-scaleUp space-y-0 text-white">
             
             {/* Modal Header */}
-            <div className="bg-stone-900 text-white p-4 sm:p-5 flex items-center justify-between">
+            <div className="bg-[#0c1920] text-white p-4 sm:p-5 flex items-center justify-between border-b border-[#162a34]">
               <div className="flex items-center gap-2.5">
-                <span className="w-3 h-3 rounded-full bg-amber-500 ring-4 ring-amber-400/30" />
+                <span className="w-3 h-3 rounded-full bg-[#22d3ee] ring-4 ring-[#22d3ee]/20" />
                 <div>
                   <h3 className="font-black text-sm sm:text-base truncate max-w-md">
                     {previewTask.title}
                   </h3>
-                  <span className="text-[10px] text-amber-300 font-bold">
+                  <span className="text-[10px] text-[#22d3ee] font-bold">
                     معاينة وتعديل مواعيد المهمة والخطوات
                   </span>
                 </div>
@@ -901,7 +901,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               <button
                 type="button"
                 onClick={() => setPreviewTaskId(null)}
-                className="text-stone-400 hover:text-white p-1 rounded-lg hover:bg-stone-800 transition cursor-pointer"
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-[#182c35] transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -914,40 +914,40 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 
                 {/* Project Info */}
-                <div className="bg-stone-50 rounded-2xl p-3 border border-stone-200/80 space-y-1.5 text-xs">
-                  <div className="flex items-center gap-1.5 font-black text-stone-900 border-b border-stone-200/60 pb-1">
-                    <Building2 className="w-3.5 h-3.5 text-amber-600" />
+                <div className="bg-[#182c35] rounded-2xl p-3 border border-[#22404e] space-y-1.5 text-xs">
+                  <div className="flex items-center gap-1.5 font-black text-white border-b border-[#22404e] pb-1">
+                    <Building2 className="w-3.5 h-3.5 text-cyan-400" />
                     <span>المشروع التابع:</span>
                   </div>
                   {(() => {
                     const proj = projects.find(p => p.id === previewTask.projectId);
                     return proj ? (
                       <div className="space-y-1 text-[11px]">
-                        <p className="font-bold text-stone-900">{proj.name} ({proj.code})</p>
-                        <p className="text-stone-600">العميل: <span className="font-medium text-stone-800">{proj.client}</span></p>
-                        <p className="text-stone-600">الموقع: <span className="font-medium text-stone-800">{proj.location}</span></p>
+                        <p className="font-bold text-white">{proj.name} ({proj.code})</p>
+                        <p className="text-slate-400">العميل: <span className="font-medium text-slate-200">{proj.client}</span></p>
+                        <p className="text-slate-400">الموقع: <span className="font-medium text-slate-200">{proj.location}</span></p>
                       </div>
                     ) : (
-                      <p className="text-stone-400 italic">بدون مشروع محدد</p>
+                      <p className="text-slate-500 italic">بدون مشروع محدد</p>
                     );
                   })()}
                 </div>
 
                 {/* Supervisor Info */}
-                <div className="bg-stone-50 rounded-2xl p-3 border border-stone-200/80 space-y-1.5 text-xs">
-                  <div className="flex items-center gap-1.5 font-black text-stone-900 border-b border-stone-200/60 pb-1">
-                    <User className="w-3.5 h-3.5 text-blue-600" />
+                <div className="bg-[#182c35] rounded-2xl p-3 border border-[#22404e] space-y-1.5 text-xs">
+                  <div className="flex items-center gap-1.5 font-black text-white border-b border-[#22404e] pb-1">
+                    <User className="w-3.5 h-3.5 text-cyan-400" />
                     <span>المشرف العام المسؤول:</span>
                   </div>
                   {(() => {
                     const member = teamMembers.find(m => m.id === previewTask.assignedMemberId);
                     return member ? (
                       <div className="space-y-1 text-[11px]">
-                        <p className="font-bold text-stone-900">{member.name}</p>
-                        <p className="text-stone-600">الوظيفة: <span className="font-medium text-stone-800">{member.role}</span></p>
+                        <p className="font-bold text-white">{member.name}</p>
+                        <p className="text-slate-400">الوظيفة: <span className="font-medium text-slate-200">{member.role}</span></p>
                         <a 
                           href={`tel:${member.phone}`}
-                          className="inline-flex items-center gap-1 text-emerald-700 font-bold hover:underline"
+                          className="inline-flex items-center gap-1 text-emerald-400 font-bold hover:underline"
                           dir="ltr"
                         >
                           <Phone className="w-3 h-3" />
@@ -955,7 +955,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         </a>
                       </div>
                     ) : (
-                      <p className="text-stone-400 italic">غير محدد</p>
+                      <p className="text-slate-500 italic">غير محدد</p>
                     );
                   })()}
                 </div>
@@ -963,13 +963,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               </div>
 
               {/* Start & End Date Dual Editor Box */}
-              <div className="bg-amber-50/60 border border-amber-200/90 rounded-2xl p-3.5 space-y-3">
-                <div className="flex items-center justify-between border-b border-amber-200/60 pb-2">
-                  <div className="flex items-center gap-1.5 font-black text-xs text-amber-950">
-                    <CalendarRange className="w-4 h-4 text-amber-700" />
+              <div className="bg-[#101c22] border border-[#1b3440] rounded-2xl p-3.5 space-y-3">
+                <div className="flex items-center justify-between border-b border-[#1b3440] pb-2">
+                  <div className="flex items-center gap-1.5 font-black text-xs text-white">
+                    <CalendarRange className="w-4 h-4 text-cyan-400" />
                     <span>مواعيد بدء وانتهاء المهمة:</span>
                   </div>
-                  <span className="text-[10px] text-amber-800 font-bold bg-amber-200/70 px-2 py-0.5 rounded-full">
+                  <span className="text-[10px] text-cyan-300 font-bold bg-[#0e3b43] border border-cyan-500/30 px-2 py-0.5 rounded-full">
                     حفظ فوري تلقائي
                   </span>
                 </div>
@@ -977,7 +977,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                   {/* Start Date */}
                   <div className="space-y-1">
-                    <label className="text-[11px] font-bold text-stone-700 flex items-center gap-1">
+                    <label className="text-[11px] font-bold text-slate-300 flex items-center gap-1">
                       <span className="w-2 h-2 rounded-full bg-emerald-500" />
                       <span>تاريخ البدء:</span>
                     </label>
@@ -985,21 +985,21 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       type="date"
                       value={previewTask.startDate || previewTask.createdAt.slice(0, 10)}
                       onChange={(e) => onUpdateTask(previewTask.id, { startDate: e.target.value || undefined })}
-                      className="w-full bg-white border border-stone-300 rounded-xl px-2.5 py-1.5 text-xs font-bold text-stone-900 outline-none focus:border-amber-500"
+                      className="w-full bg-[#182c35] border border-[#22404e] rounded-xl px-2.5 py-1.5 text-xs font-bold text-white outline-none focus:border-cyan-400"
                     />
                   </div>
 
                   {/* End Date */}
                   <div className="space-y-1">
-                    <label className="text-[11px] font-bold text-stone-700 flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-amber-500" />
+                    <label className="text-[11px] font-bold text-slate-300 flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-cyan-400" />
                       <span>تاريخ الانتهاء / التسليم:</span>
                     </label>
                     <input
                       type="date"
                       value={previewTask.expectedClosingDate || ''}
                       onChange={(e) => onUpdateTask(previewTask.id, { expectedClosingDate: e.target.value || undefined })}
-                      className="w-full bg-white border border-stone-300 rounded-xl px-2.5 py-1.5 text-xs font-bold text-stone-900 outline-none focus:border-amber-500"
+                      className="w-full bg-[#182c35] border border-[#22404e] rounded-xl px-2.5 py-1.5 text-xs font-bold text-white outline-none focus:border-cyan-400"
                     />
                   </div>
                 </div>
@@ -1011,19 +1011,19 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   const deadline = getDeadlineInfo(previewTask.expectedClosingDate, isDone);
 
                   return (
-                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] font-bold text-stone-700">
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] font-bold text-slate-300">
                       <div className="flex items-center gap-2">
                         {durationDays && (
-                          <span className="bg-white border border-amber-200 px-2 py-0.5 rounded-lg text-amber-950 font-black">
+                          <span className="bg-[#182c35] border border-[#22404e] px-2 py-0.5 rounded-lg text-cyan-300 font-black">
                             ⏱️ المدة الإجمالية: {durationDays} {durationDays === 1 ? 'يوم' : 'أيام'}
                           </span>
                         )}
                         <span className={`px-2 py-0.5 rounded-lg border ${
                           isDone 
-                            ? 'bg-emerald-100 text-emerald-900 border-emerald-300' 
+                            ? 'bg-emerald-950/70 text-emerald-300 border-emerald-800' 
                             : deadline.isOverdue 
-                            ? 'bg-red-100 text-red-900 border-red-300' 
-                            : 'bg-stone-100 text-stone-800 border-stone-200'
+                            ? 'bg-red-950/70 text-red-300 border-red-800' 
+                            : 'bg-[#182c35] text-slate-300 border-[#22404e]'
                         }`}>
                           {deadline.badgeText}
                         </span>
@@ -1031,7 +1031,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
                       {/* Quick extension shortcuts */}
                       <div className="flex items-center gap-1">
-                        <span className="text-[10px] text-stone-500">تمديد سريع:</span>
+                        <span className="text-[10px] text-slate-400">تمديد سريع:</span>
                         <button
                           type="button"
                           onClick={() => {
@@ -1039,7 +1039,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             base.setDate(base.getDate() + 3);
                             onUpdateTask(previewTask.id, { expectedClosingDate: formatDateStr(base) });
                           }}
-                          className="px-1.5 py-0.5 bg-white hover:bg-stone-100 border border-stone-300 rounded text-[10px] font-bold text-stone-800"
+                          className="px-1.5 py-0.5 bg-[#182c35] hover:bg-[#203a46] border border-[#22404e] rounded text-[10px] font-bold text-cyan-200 cursor-pointer"
                         >
                           +3 أيام
                         </button>
@@ -1050,7 +1050,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             base.setDate(base.getDate() + 7);
                             onUpdateTask(previewTask.id, { expectedClosingDate: formatDateStr(base) });
                           }}
-                          className="px-1.5 py-0.5 bg-white hover:bg-stone-100 border border-stone-300 rounded text-[10px] font-bold text-stone-800"
+                          className="px-1.5 py-0.5 bg-[#182c35] hover:bg-[#203a46] border border-[#22404e] rounded text-[10px] font-bold text-cyan-200 cursor-pointer"
                         >
                           + أسبوع
                         </button>
@@ -1063,13 +1063,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
               {/* Subtasks Checklist */}
               <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs font-bold text-stone-900">
+                <div className="flex items-center justify-between text-xs font-bold text-white">
                   <span>سلسلة الخطوات الفرعية ({previewTask.subtasks.length}):</span>
                   {onAddSubtask && (
                     <button
                       type="button"
                       onClick={() => onAddSubtask(previewTask.id)}
-                      className="text-amber-800 hover:text-amber-950 font-bold text-[11px] flex items-center gap-0.5 cursor-pointer"
+                      className="text-cyan-400 hover:text-cyan-300 font-bold text-[11px] flex items-center gap-0.5 cursor-pointer"
                     >
                       <Plus className="w-3 h-3" />
                       <span>إضافة خطوة</span>
@@ -1077,7 +1077,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   )}
                 </div>
 
-                <div className="bg-stone-50 rounded-2xl border border-stone-200 divide-y divide-stone-100 text-xs">
+                <div className="bg-[#182c35] rounded-2xl border border-[#22404e] divide-y divide-[#22404e] text-xs">
                   {previewTask.subtasks.map((step) => {
                     const isDone = step.status === 'completed';
                     const assigned = teamMembers.find(m => m.id === step.assignedMemberId);
@@ -1093,18 +1093,18 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                               );
                               onUpdateTask(previewTask.id, { subtasks: updated });
                             }}
-                            className={`p-0.5 rounded cursor-pointer transition ${isDone ? 'text-emerald-600' : 'text-stone-300 hover:text-amber-600'}`}
+                            className={`p-0.5 rounded cursor-pointer transition ${isDone ? 'text-emerald-400' : 'text-slate-500 hover:text-cyan-400'}`}
                             title={isDone ? 'تغيير إلى غير مكتمل' : 'تعليم كمكتمل'}
                           >
                             <CheckCircle2 className="w-4 h-4" />
                           </button>
-                          <span className={`truncate font-bold ${isDone ? 'line-through text-stone-400' : 'text-stone-800'}`}>
+                          <span className={`truncate font-bold ${isDone ? 'line-through text-slate-500' : 'text-white'}`}>
                             {step.title}
                           </span>
                         </div>
 
                         {assigned && (
-                          <span className="text-[10px] text-stone-600 bg-white border border-stone-200 px-2 py-0.5 rounded-lg shrink-0">
+                          <span className="text-[10px] text-slate-300 bg-[#132229] border border-[#22404e] px-2 py-0.5 rounded-lg shrink-0">
                             {assigned.name}
                           </span>
                         )}
@@ -1119,7 +1119,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setPreviewTaskId(null)}
-                  className="bg-stone-900 hover:bg-stone-800 text-white font-black px-5 py-2 rounded-xl text-xs cursor-pointer shadow-xs"
+                  className="bg-[#088395] hover:bg-[#0aa0b6] text-white font-black px-5 py-2 rounded-xl text-xs cursor-pointer shadow-xs transition"
                 >
                   إغلاق النافذة
                 </button>

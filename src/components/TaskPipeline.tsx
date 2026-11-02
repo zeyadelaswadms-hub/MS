@@ -55,6 +55,8 @@ export const TaskPipeline: React.FC<TaskPipelineProps> = ({
   const [editingTransitionId, setEditingTransitionId] = useState<string | null>(null);
   const [transitionInput, setTransitionInput] = useState('');
   const [activeSubtaskDetailsId, setActiveSubtaskDetailsId] = useState<string | null>(null);
+  const touchStartPosRef = React.useRef<{ x: number; y: number } | null>(null);
+  const touchMovedRef = React.useRef<boolean>(false);
 
   const getStatusIcon = (status: SubTaskStatus, index: number) => {
     switch (status) {
@@ -134,7 +136,7 @@ export const TaskPipeline: React.FC<TaskPipelineProps> = ({
   return (
     <div className="w-full">
       {/* Scrollable Container for Steps with horizontal flow */}
-      <div className="overflow-x-auto pb-4 pt-2 scrollbar-thin scrollbar-thumb-stone-300 scrollbar-track-stone-100">
+      <div className="overflow-x-auto pb-4 pt-2 scrollbar-thin scrollbar-thumb-stone-300 scrollbar-track-stone-100 touch-pan-x overscroll-x-contain">
         <div className="flex items-start min-w-max px-2 py-3 gap-0">
           {subtasks.map((step, index) => {
             const assignedMember = teamMembers.find(m => m.id === step.assignedMemberId);
@@ -202,7 +204,31 @@ export const TaskPipeline: React.FC<TaskPipelineProps> = ({
                   <button
                     id={`step-circle-${step.id}`}
                     type="button"
-                    onClick={() => handleStatusCycle(step)}
+                    onTouchStart={(e) => {
+                      touchMovedRef.current = false;
+                      const touch = e.touches[0];
+                      touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
+                    }}
+                    onTouchMove={(e) => {
+                      if (touchStartPosRef.current) {
+                        const touch = e.touches[0];
+                        const dx = Math.abs(touch.clientX - touchStartPosRef.current.x);
+                        const dy = Math.abs(touch.clientY - touchStartPosRef.current.y);
+                        if (dx > 6 || dy > 6) {
+                          touchMovedRef.current = true;
+                        }
+                      }
+                    }}
+                    onTouchEnd={() => {
+                      setTimeout(() => {
+                        touchMovedRef.current = false;
+                        touchStartPosRef.current = null;
+                      }, 100);
+                    }}
+                    onClick={() => {
+                      if (touchMovedRef.current) return;
+                      handleStatusCycle(step);
+                    }}
                     title={`انقر لتعديل الحالة (جاري الإنجاز ➔ تم الإنجاز ➔ انتظار): الحالة الحالية ${step.status === 'completed' ? 'تم الإنجاز' : step.status === 'in_progress' ? 'جاري الإنجاز' : 'قيد الانتظار'}`}
                     disabled={readOnly}
                     className={`w-[138px] h-[138px] sm:w-[155px] sm:h-[155px] rounded-full flex flex-col items-center justify-center p-2 text-center transition-all duration-200 cursor-pointer transform group-hover:scale-105 active:scale-95 relative select-none shadow-xs z-10 overflow-hidden ${getCircleClasses(

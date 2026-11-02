@@ -9,7 +9,6 @@ import {
 import { TaskPipeline } from './TaskPipeline';
 import { AttachmentModal, AttachmentTarget } from './AttachmentModal';
 import { ImageLightboxModal } from './ImageLightboxModal';
-import { CalendarView } from './CalendarView';
 import { 
   Building2, 
   Search, 
@@ -29,6 +28,7 @@ import {
   Phone, 
   Trash2, 
   Edit2, 
+  Edit3,
   Layers, 
   ExternalLink, 
   RotateCcw,
@@ -42,6 +42,10 @@ import {
   X,
   ArrowUpDown
 } from 'lucide-react';
+import { 
+  computePipelineStatusOnSubtaskChange, 
+  canUpdatePipelineStatusManually 
+} from '../utils/pipelineUtils';
 
 interface UnifiedProjectsTasksViewProps {
   tasks: Task[];
@@ -54,6 +58,7 @@ interface UnifiedProjectsTasksViewProps {
   onAddSubtask: (taskId: string) => void;
   onOpenCreateTask: (projectId?: string) => void;
   onOpenCreateProject: () => void;
+  onOpenEditTask?: (task: Task) => void;
 }
 
 export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> = ({
@@ -67,6 +72,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
   onAddSubtask,
   onOpenCreateTask,
   onOpenCreateProject,
+  onOpenEditTask,
 }) => {
   // Multi-project selection state (allows selecting multiple projects at once or 'all')
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>(
@@ -79,6 +85,17 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
       setSelectedProjectIds(selectedProjectId === 'all' ? ['all'] : [selectedProjectId]);
     }
   }, [selectedProjectId]);
+
+  // Self-heal if projects array updates and selected IDs no longer exist
+  useEffect(() => {
+    if (!selectedProjectIds.includes('all')) {
+      const valid = selectedProjectIds.filter(id => projects.some(p => p.id === id));
+      if (valid.length === 0) {
+        setSelectedProjectIds(['all']);
+        onSelectProject('all');
+      }
+    }
+  }, [projects]);
   
   // Search and filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -114,8 +131,6 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
   // View mode inside expanded task (compact step table vs visual pipeline)
   const [taskViewMode, setTaskViewMode] = useState<Record<string, 'table' | 'pipeline'>>({});
 
-  // View mode for the entire tasks view: table list vs interactive calendar
-  const [tasksViewMode, setTasksViewMode] = useState<'table' | 'calendar'>('table');
 
   // Attachment Modal State
   const [attachmentTarget, setAttachmentTarget] = useState<AttachmentTarget | null>(null);
@@ -317,7 +332,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
     return null;
   }, [selectedProjectIds, projects]);
 
-  // Subtask handlers
+  // Subtask handlers with sequential pipeline logic
   const handleUpdateSubtask = (taskId: string, subtaskId: string, updates: Partial<SubTask>) => {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
@@ -329,12 +344,13 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
       return st;
     });
 
-    const allDone = updatedSubtasks.length > 0 && updatedSubtasks.every(s => s.status === 'completed');
-    const newStatus = allDone ? 'completed' : task.status === 'completed' ? 'in_progress' : task.status;
+    const newPipelineStatus = updates.status
+      ? computePipelineStatusOnSubtaskChange(task, subtaskId, updates.status, updatedSubtasks)
+      : task.status;
 
     onUpdateTask(taskId, {
       subtasks: updatedSubtasks,
-      status: newStatus,
+      status: newPipelineStatus,
     });
   };
 
@@ -490,75 +506,44 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
         1. TOP UNIFIED PROJECTS SELECTOR & ACTIONS (دمج المشاريع والمهام في شاشة واحدة)
         ========================================================================
       */}
-      <div className="bg-white rounded-2xl p-4 border border-stone-200/80 shadow-xs space-y-3">
+      <div className="bg-[#132229] rounded-2xl p-4 border border-[#1c3542] shadow-md space-y-3 text-white">
         
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <Building2 className="w-5 h-5 text-amber-600 shrink-0" />
-            <h2 className="text-base sm:text-lg font-black text-stone-900 tracking-tight">
-              لوحة المشاريع والمهام
-            </h2>
+        {/* السطر الأول: عنوان لوحة المشاريع والمهام في سطر مستقل */}
+        <div className="flex items-center gap-2.5">
+          <Building2 className="w-5 h-5 text-[#22d3ee] shrink-0" />
+          <h2 className="text-base sm:text-lg font-black text-white tracking-tight">
+            لوحة المشاريع والمهام
+          </h2>
+        </div>
 
-            {/* Quick + إضافة مهمة button right next to the title */}
-            <button
-              type="button"
-              id="quick-add-task-btn"
-              onClick={() => onOpenCreateTask(singleSelectedProject?.id)}
-              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-stone-950 text-xs font-black rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1.5 shrink-0"
-              title="إضافة مهمة جديدة"
-            >
-              <Plus className="w-3.5 h-3.5 stroke-[3]" />
-              <span>+ إضافة مهمة</span>
-            </button>
+        {/* السطر الثاني: خانات إضافة مهمة وإضافة مشروع في سطر منفصل أسفل العنوان */}
+        <div className="flex flex-wrap items-center gap-2.5 pt-0.5">
+          <button
+            type="button"
+            id="quick-add-task-btn"
+            onClick={() => onOpenCreateTask(singleSelectedProject?.id)}
+            className="px-3.5 py-1.5 bg-[#088395] hover:bg-[#0aa0b6] active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1.5 shrink-0 border border-cyan-400/30"
+            title="إضافة مهمة جديدة"
+          >
+            <Plus className="w-3.5 h-3.5 stroke-[3]" />
+            <span>+ إضافة مهمة</span>
+          </button>
 
-            {/* Quick + إضافة مشروع button directly next to + إضافة مهمة as requested by user */}
-            <button
-              type="button"
-              id="quick-add-project-btn"
-              onClick={onOpenCreateProject}
-              className="px-3 py-1.5 bg-stone-900 hover:bg-stone-800 active:scale-95 text-amber-300 text-xs font-black rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1.5 shrink-0 border border-stone-700 hover:border-amber-400"
-              title="إضافة مشروع جديد"
-            >
-              <Plus className="w-3.5 h-3.5 stroke-[3]" />
-              <span>+ إضافة مشروع</span>
-            </button>
-          </div>
-
-          {/* View Mode Switcher: Table/List vs Interactive Calendar */}
-          <div className="flex items-center bg-stone-100 p-0.5 rounded-xl border border-stone-200">
-            <button
-              type="button"
-              id="tasks-view-table-btn"
-              onClick={() => setTasksViewMode('table')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                tasksViewMode === 'table'
-                  ? 'bg-white text-stone-950 shadow-2xs font-black'
-                  : 'text-stone-600 hover:text-stone-900'
-              }`}
-            >
-              <Layers className="w-3.5 h-3.5" />
-              <span>قائمة المهام والجدول</span>
-            </button>
-
-            <button
-              type="button"
-              id="tasks-view-calendar-btn"
-              onClick={() => setTasksViewMode('calendar')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                tasksViewMode === 'calendar'
-                  ? 'bg-amber-500 text-stone-950 shadow-2xs font-black ring-1 ring-amber-400'
-                  : 'text-stone-600 hover:text-stone-900'
-              }`}
-            >
-              <Calendar className="w-3.5 h-3.5" />
-              <span>عرض التقويم والسحب والإفلات 📅</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            id="quick-add-project-btn"
+            onClick={onOpenCreateProject}
+            className="px-3.5 py-1.5 bg-[#182c35] hover:bg-[#203a46] active:scale-95 text-cyan-300 text-xs font-bold rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1.5 shrink-0 border border-[#22404e] hover:border-cyan-400/50"
+            title="إضافة مشروع جديد"
+          >
+            <Plus className="w-3.5 h-3.5 stroke-[3]" />
+            <span>+ إضافة مشروع</span>
+          </button>
         </div>
 
         {/* Project Selection Chips (Multi-select and Single-click) */}
-        <div className="pt-2 border-t border-stone-100 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
-          <span className="text-[11px] font-bold text-stone-400 shrink-0">المشاريع:</span>
+        <div className="pt-2 border-t border-[#1b3440] flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
+          <span className="text-[11px] font-bold text-slate-400 shrink-0">المشاريع:</span>
           
           {/* 'All Projects' Chip */}
           <button
@@ -566,13 +551,13 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
             onClick={(e) => handleToggleProject('all', e)}
             className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
               selectedProjectIds.includes('all')
-                ? 'bg-stone-900 text-white shadow-xs'
-                : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
+                ? 'bg-[#088395] text-white shadow-xs'
+                : 'bg-[#182c35] hover:bg-[#203a46] text-slate-300'
             }`}
           >
             <span>كل المشاريع</span>
             <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-              selectedProjectIds.includes('all') ? 'bg-stone-800 text-amber-400' : 'bg-stone-200 text-stone-600'
+              selectedProjectIds.includes('all') ? 'bg-[#0c3540] text-cyan-200' : 'bg-[#12222a] text-slate-400'
             }`}>
               {tasks.length}
             </span>
@@ -591,14 +576,14 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                 title="اضغط للاختيار، أو استخدم Ctrl/Shift للاختيار المتعدد"
                 className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shrink-0 cursor-pointer border ${
                   isSelected
-                    ? 'bg-amber-500/15 text-amber-950 border-amber-400 ring-1 ring-amber-400'
-                    : 'bg-stone-50 hover:bg-stone-100 text-stone-700 border-stone-200'
+                    ? 'bg-[#0e3b43] text-cyan-200 border-cyan-500/60 ring-1 ring-cyan-400/40'
+                    : 'bg-[#182c35] hover:bg-[#203a46] text-slate-300 border-[#22404e]'
                 }`}
               >
-                <span className={`w-2 h-2 rounded-full ${project.color || 'bg-amber-500'}`}></span>
+                <span className={`w-2 h-2 rounded-full ${project.color || 'bg-cyan-500'}`}></span>
                 <span>{project.name}</span>
                 <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                  isSelected ? 'bg-amber-200 text-amber-900' : 'bg-stone-200 text-stone-600'
+                  isSelected ? 'bg-[#088395] text-white' : 'bg-[#101c22] text-slate-400'
                 }`}>
                   {projectTaskCount}
                 </span>
@@ -609,19 +594,19 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
 
         {/* If a single project is selected, show its clean summary banner */}
         {singleSelectedProject && (
-          <div className="mt-2 p-3 bg-stone-50 rounded-xl border border-stone-200 text-xs flex flex-wrap items-center justify-between gap-3">
+          <div className="mt-2 p-3 bg-[#182c35] rounded-xl border border-[#22404e] text-xs flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-4">
               <div>
-                <span className="text-[10px] text-stone-400 block">كود المشروع والعميل:</span>
-                <span className="font-bold text-stone-800">{singleSelectedProject.code} • {singleSelectedProject.client}</span>
+                <span className="text-[10px] text-slate-400 block">كود المشروع والعميل:</span>
+                <span className="font-bold text-white">{singleSelectedProject.code} • {singleSelectedProject.client}</span>
               </div>
               <div>
-                <span className="text-[10px] text-stone-400 block">الموقع الميداني:</span>
-                <span className="font-medium text-stone-700">{singleSelectedProject.location}</span>
+                <span className="text-[10px] text-slate-400 block">الموقع الميداني:</span>
+                <span className="font-medium text-slate-300">{singleSelectedProject.location}</span>
               </div>
               <div>
-                <span className="text-[10px] text-stone-400 block">الجدول الزمني:</span>
-                <span className="font-medium text-stone-700" dir="ltr">{singleSelectedProject.startDate} ➔ {singleSelectedProject.expectedEndDate}</span>
+                <span className="text-[10px] text-slate-400 block">الجدول الزمني:</span>
+                <span className="font-medium text-slate-300" dir="ltr">{singleSelectedProject.startDate} ➔ {singleSelectedProject.expectedEndDate}</span>
               </div>
             </div>
 
@@ -629,7 +614,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
               <button
                 type="button"
                 onClick={() => onOpenCreateTask(singleSelectedProject.id)}
-                className="text-[11px] font-bold text-amber-800 hover:text-amber-950 bg-amber-100/70 hover:bg-amber-200/80 px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1"
+                className="text-[11px] font-bold text-cyan-200 hover:text-white bg-[#0e3b43] hover:bg-[#134e5a] border border-cyan-500/40 px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1"
               >
                 <Plus className="w-3 h-3 stroke-[3]" />
                 <span>+ مهمة في {singleSelectedProject.code}</span>
@@ -637,7 +622,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
               <button
                 type="button"
                 onClick={onOpenCreateProject}
-                className="text-[11px] font-bold text-stone-800 hover:text-stone-950 bg-stone-200/80 hover:bg-stone-300 px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1"
+                className="text-[11px] font-bold text-slate-300 hover:text-white bg-[#101c22] hover:bg-[#15252e] border border-[#22404e] px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1"
                 title="إضافة مشروع جديد"
               >
                 <Plus className="w-3 h-3 stroke-[3]" />
@@ -649,31 +634,13 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
 
       </div>
 
-      {tasksViewMode === 'calendar' ? (
-        <CalendarView
-          tasks={tasks}
-          projects={projects}
-          teamMembers={teamMembers}
-          defaultProjectId={selectedProjectIds.length === 1 && selectedProjectIds[0] !== 'all' ? selectedProjectIds[0] : 'all'}
-          onUpdateTask={onUpdateTask}
-          onDeleteTask={onDeleteTask}
-          onAddSubtask={onAddSubtask}
-          onOpenCreateTask={(projId, initialDate) => {
-            onOpenCreateTask(projId || (selectedProjectIds.length === 1 && selectedProjectIds[0] !== 'all' ? selectedProjectIds[0] : undefined));
-          }}
-          onSelectProject={(projId) => {
-            setSelectedProjectIds([projId]);
-            onSelectProject(projId);
-          }}
-        />
-      ) : (
-        <>
+
           {/* 
             ========================================================================
             2. COMPACT SINGLE-ROW FILTER BAR (فلاتر مبسطة بارتفاع صف واحد فقط)
             ========================================================================
           */}
-          <div className="bg-white rounded-xl px-2.5 py-1.5 border border-stone-200/80 flex items-center justify-between gap-2 overflow-x-auto scrollbar-none whitespace-nowrap min-h-[38px]">
+          <div className="bg-[#132229] rounded-xl px-2.5 py-1.5 border border-[#1c3542] flex items-center justify-between gap-2 overflow-x-auto scrollbar-none whitespace-nowrap min-h-[38px] text-white">
         
         {/* Quick Filter Buttons (Single Row with badge counts next to labels) */}
         <div className="flex items-center gap-1 shrink-0">
@@ -682,13 +649,13 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
             onClick={() => setStatusFilter('unclosed')}
             className={`px-2 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer flex items-center gap-1 shrink-0 ${
               statusFilter === 'unclosed'
-                ? 'bg-amber-100 text-amber-950 border border-amber-300 shadow-2xs'
-                : 'bg-stone-50 hover:bg-stone-100 text-stone-600 border border-stone-200'
+                ? 'bg-[#0e3b43] text-cyan-300 border border-cyan-500/50 shadow-2xs'
+                : 'bg-[#182c35] hover:bg-[#203a46] text-slate-300 border border-[#22404e]'
             }`}
           >
             <span>النشطة</span>
             <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
-              statusFilter === 'unclosed' ? 'bg-amber-300/80 text-amber-950' : 'bg-stone-200 text-stone-700'
+              statusFilter === 'unclosed' ? 'bg-[#088395] text-white' : 'bg-[#101c22] text-slate-400'
             }`}>
               {stats.unclosed}
             </span>
@@ -699,14 +666,14 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
             onClick={() => setStatusFilter('overdue')}
             className={`px-2 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer flex items-center gap-1 shrink-0 ${
               statusFilter === 'overdue'
-                ? 'bg-red-100 text-red-950 border border-red-300 shadow-2xs'
-                : 'bg-stone-50 hover:bg-stone-100 text-stone-600 border border-stone-200'
+                ? 'bg-red-950/60 text-red-300 border border-red-800 shadow-2xs'
+                : 'bg-[#182c35] hover:bg-[#203a46] text-slate-300 border border-[#22404e]'
             }`}
           >
-            <AlertTriangle className="w-3 h-3 text-red-600 shrink-0" />
+            <AlertTriangle className="w-3 h-3 text-red-400 shrink-0" />
             <span>المتأخرة</span>
             <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
-              statusFilter === 'overdue' ? 'bg-red-300/80 text-red-950' : 'bg-stone-200 text-stone-700'
+              statusFilter === 'overdue' ? 'bg-red-900 text-red-200' : 'bg-[#101c22] text-slate-400'
             }`}>
               {stats.overdue}
             </span>
@@ -717,13 +684,13 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
             onClick={() => setStatusFilter('completed')}
             className={`px-2 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer flex items-center gap-1 shrink-0 ${
               statusFilter === 'completed'
-                ? 'bg-emerald-100 text-emerald-950 border border-emerald-300 shadow-2xs'
-                : 'bg-stone-50 hover:bg-stone-100 text-stone-600 border border-stone-200'
+                ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800 shadow-2xs'
+                : 'bg-[#182c35] hover:bg-[#203a46] text-slate-300 border border-[#22404e]'
             }`}
           >
             <span>المكتملة</span>
             <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
-              statusFilter === 'completed' ? 'bg-emerald-300/80 text-emerald-950' : 'bg-stone-200 text-stone-700'
+              statusFilter === 'completed' ? 'bg-emerald-900 text-emerald-200' : 'bg-[#101c22] text-slate-400'
             }`}>
               {stats.completed}
             </span>
@@ -734,13 +701,13 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
             onClick={() => setStatusFilter('all')}
             className={`px-2 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer flex items-center gap-1 shrink-0 ${
               statusFilter === 'all'
-                ? 'bg-stone-900 text-white shadow-2xs'
-                : 'bg-stone-50 hover:bg-stone-100 text-stone-600 border border-stone-200'
+                ? 'bg-[#088395] text-white shadow-2xs'
+                : 'bg-[#182c35] hover:bg-[#203a46] text-slate-300 border border-[#22404e]'
             }`}
           >
             <span>الكل</span>
             <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
-              statusFilter === 'all' ? 'bg-stone-700 text-amber-400' : 'bg-stone-200 text-stone-700'
+              statusFilter === 'all' ? 'bg-[#0c2f38] text-cyan-200' : 'bg-[#101c22] text-slate-400'
             }`}>
               {stats.total}
             </span>
@@ -753,30 +720,30 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
-              className="bg-stone-50 border border-stone-200 rounded-lg px-2 py-0.5 text-[11px] font-bold text-stone-700 outline-none h-7"
+              className="bg-[#182c35] border border-[#22404e] rounded-lg px-2 py-0.5 text-[11px] font-bold text-slate-200 outline-none h-7"
             >
-              <option value="all">كل البنود</option>
+              <option value="all" className="bg-[#132229]">كل البنود</option>
               {categories.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
+                <option key={cat} value={cat} className="bg-[#132229]">{cat}</option>
               ))}
             </select>
           )}
 
-          {/* Advanced Filters Button ("خيارات فلترة متقدمة حسب الأولوية، التاريخ، أو المسؤول") */}
+          {/* Advanced Filters Button */}
           <button
             type="button"
             onClick={() => setShowAdvancedFilters(prev => !prev)}
             className={`px-2 sm:px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer flex items-center gap-1 shrink-0 ${
               showAdvancedFilters || activeAdvancedFiltersCount > 0
-                ? 'bg-amber-500 text-stone-950 font-black shadow-2xs ring-1 ring-amber-400'
-                : 'bg-stone-50 hover:bg-stone-100 text-stone-700 border border-stone-200'
+                ? 'bg-[#088395] text-white font-black shadow-2xs ring-1 ring-cyan-400'
+                : 'bg-[#182c35] hover:bg-[#203a46] text-slate-300 border border-[#22404e]'
             }`}
             title="خيارات الفلترة والتصنيف المتقدمة (الأولوية، التاريخ، المسؤول)"
           >
             <SlidersHorizontal className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">فلترة متقدمة</span>
             {activeAdvancedFiltersCount > 0 && (
-              <span className="w-4 h-4 rounded-full bg-stone-950 text-amber-300 text-[10px] font-bold flex items-center justify-center">
+              <span className="w-4 h-4 rounded-full bg-cyan-400 text-slate-950 text-[10px] font-bold flex items-center justify-center">
                 {activeAdvancedFiltersCount}
               </span>
             )}
@@ -784,19 +751,19 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
 
           {/* Search Box */}
           <div className="relative w-28 sm:w-40">
-            <Search className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-stone-400" />
+            <Search className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="بحث..."
-              className="w-full pl-6 pr-6 py-0.5 h-7 bg-stone-50 border border-stone-200 rounded-lg text-[11px] text-stone-800 placeholder:text-stone-400 focus:bg-white focus:border-amber-500 outline-none transition"
+              className="w-full pl-6 pr-6 py-0.5 h-7 bg-[#182c35] border border-[#22404e] rounded-lg text-[11px] text-white placeholder:text-slate-500 focus:border-cyan-400 outline-none transition"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
-                className="absolute left-1.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-0.5 cursor-pointer"
+                className="absolute left-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-0.5 cursor-pointer"
                 title="مسح البحث"
               >
                 <X className="w-3 h-3" />
@@ -813,13 +780,13 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
         ========================================================================
       */}
       {showAdvancedFilters && (
-        <div className="bg-white rounded-xl p-3 sm:p-3.5 border border-stone-200 shadow-xs space-y-2.5 animate-fadeIn">
+        <div className="bg-[#132229] rounded-xl p-3 sm:p-3.5 border border-[#1c3542] shadow-xs space-y-2.5 animate-fadeIn text-white">
           {/* Header */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 pb-2">
-            <div className="flex items-center gap-2 text-xs font-black text-stone-900">
-              <SlidersHorizontal className="w-4 h-4 text-amber-600 shrink-0" />
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#1b3440] pb-2">
+            <div className="flex items-center gap-2 text-xs font-black text-white">
+              <SlidersHorizontal className="w-4 h-4 text-cyan-400 shrink-0" />
               <span>خيارات الفلترة والتصنيف المتقدمة للمهام</span>
-              <span className="text-[11px] font-medium text-stone-400">
+              <span className="text-[11px] font-medium text-slate-400">
                 (عرض {filteredTasks.length} من أصل {tasks.length} مهمة)
               </span>
             </div>
@@ -828,7 +795,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
               <button
                 type="button"
                 onClick={handleResetAdvancedFilters}
-                className="text-[11px] font-bold text-red-600 hover:text-red-700 flex items-center gap-1 cursor-pointer transition"
+                className="text-[11px] font-bold text-red-400 hover:text-red-300 flex items-center gap-1 cursor-pointer transition"
               >
                 <RotateCcw className="w-3 h-3" />
                 <span>إعادة ضبط الفلاتر ({activeAdvancedFiltersCount})</span>
@@ -841,45 +808,45 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
             
             {/* 1. Priority Classification */}
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-stone-500 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+              <label className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
                 <span>تصنيف الأولوية:</span>
               </label>
               <select
                 value={selectedPriority}
                 onChange={(e) => setSelectedPriority(e.target.value)}
-                className={`w-full bg-stone-50 border rounded-lg px-2.5 py-1.5 text-xs font-bold outline-none transition cursor-pointer ${
+                className={`w-full bg-[#182c35] border rounded-lg px-2.5 py-1.5 text-xs font-bold outline-none transition cursor-pointer text-slate-200 ${
                   selectedPriority !== 'all' 
-                    ? 'border-amber-500 bg-amber-50/70 text-amber-950 font-black ring-1 ring-amber-400/40' 
-                    : 'border-stone-200 text-stone-700 hover:border-stone-300'
+                    ? 'border-cyan-500 bg-[#0e3b43] text-cyan-200 font-black ring-1 ring-cyan-400/40' 
+                    : 'border-[#22404e] hover:border-cyan-500/50'
                 }`}
               >
-                <option value="all">كل الأولويات</option>
-                <option value="urgent">🔴 عاجلة جداً (Urgent)</option>
-                <option value="high">🟠 مرتفعة (High)</option>
-                <option value="medium">🟡 متوسطة (Medium)</option>
-                <option value="low">🟢 منخفضة (Low)</option>
+                <option value="all" className="bg-[#132229]">كل الأولويات</option>
+                <option value="urgent" className="bg-[#132229]">🔴 عاجلة جداً (Urgent)</option>
+                <option value="high" className="bg-[#132229]">🟠 مرتفعة (High)</option>
+                <option value="medium" className="bg-[#132229]">🟡 متوسطة (Medium)</option>
+                <option value="low" className="bg-[#132229]">🟢 منخفضة (Low)</option>
               </select>
             </div>
 
             {/* 2. Assignee / Responsible Member */}
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-stone-500 flex items-center gap-1">
-                <User className="w-3 h-3 text-blue-500" />
+              <label className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
+                <User className="w-3 h-3 text-cyan-400" />
                 <span>المسؤول المكلّف:</span>
               </label>
               <select
                 value={selectedMemberId}
                 onChange={(e) => setSelectedMemberId(e.target.value)}
-                className={`w-full bg-stone-50 border rounded-lg px-2.5 py-1.5 text-xs font-bold outline-none transition cursor-pointer ${
+                className={`w-full bg-[#182c35] border rounded-lg px-2.5 py-1.5 text-xs font-bold outline-none transition cursor-pointer text-slate-200 ${
                   selectedMemberId !== 'all' 
-                    ? 'border-blue-500 bg-blue-50/70 text-blue-950 font-black ring-1 ring-blue-400/40' 
-                    : 'border-stone-200 text-stone-700 hover:border-stone-300'
+                    ? 'border-cyan-500 bg-[#0e3b43] text-cyan-200 font-black ring-1 ring-cyan-400/40' 
+                    : 'border-[#22404e] hover:border-cyan-500/50'
                 }`}
               >
-                <option value="all">كل المسؤولين والمشرفين ({teamMembers.length})</option>
+                <option value="all" className="bg-[#132229]">كل المسؤولين والمشرفين ({teamMembers.length})</option>
                 {teamMembers.map(m => (
-                  <option key={m.id} value={m.id}>
+                  <option key={m.id} value={m.id} className="bg-[#132229]">
                     {m.name} ({m.role})
                   </option>
                 ))}
@@ -888,49 +855,49 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
 
             {/* 3. Date / Deadline Filter */}
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-stone-500 flex items-center gap-1">
-                <Calendar className="w-3 h-3 text-emerald-500" />
+              <label className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
+                <Calendar className="w-3 h-3 text-cyan-400" />
                 <span>تصفية التاريخ والموعد:</span>
               </label>
               <select
                 value={dateFilter}
                 onChange={(e) => setDateFilter(e.target.value)}
-                className={`w-full bg-stone-50 border rounded-lg px-2.5 py-1.5 text-xs font-bold outline-none transition cursor-pointer ${
+                className={`w-full bg-[#182c35] border rounded-lg px-2.5 py-1.5 text-xs font-bold outline-none transition cursor-pointer text-slate-200 ${
                   dateFilter !== 'all' 
-                    ? 'border-emerald-500 bg-emerald-50/70 text-emerald-950 font-black ring-1 ring-emerald-400/40' 
-                    : 'border-stone-200 text-stone-700 hover:border-stone-300'
+                    ? 'border-cyan-500 bg-[#0e3b43] text-cyan-200 font-black ring-1 ring-cyan-400/40' 
+                    : 'border-[#22404e] hover:border-cyan-500/50'
                 }`}
               >
-                <option value="all">كل المواعيد الزمنية</option>
-                <option value="today">⚡ تاريخ الإغلاق اليوم</option>
-                <option value="this_week">📅 خلال هذا الأسبوع (7 أيام)</option>
-                <option value="overdue">⚠️ متأخرة عن الموعد</option>
-                <option value="has_date">📌 محدد لها موعد إغلاق</option>
-                <option value="no_date">⚪ بدون تاريخ محدد</option>
+                <option value="all" className="bg-[#132229]">كل المواعيد الزمنية</option>
+                <option value="today" className="bg-[#132229]">⚡ تاريخ الإغلاق اليوم</option>
+                <option value="this_week" className="bg-[#132229]">📅 خلال هذا الأسبوع (7 أيام)</option>
+                <option value="overdue" className="bg-[#132229]">⚠️ متأخرة عن الموعد</option>
+                <option value="has_date" className="bg-[#132229]">📌 محدد لها موعد إغلاق</option>
+                <option value="no_date" className="bg-[#132229]">⚪ بدون تاريخ محدد</option>
               </select>
             </div>
 
             {/* 4. Sorting Classification */}
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-stone-500 flex items-center gap-1">
-                <ArrowUpDown className="w-3 h-3 text-purple-500" />
+              <label className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
+                <ArrowUpDown className="w-3 h-3 text-cyan-400" />
                 <span>ترتيب المهام حسب:</span>
               </label>
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className={`w-full bg-stone-50 border rounded-lg px-2.5 py-1.5 text-xs font-bold outline-none transition cursor-pointer ${
+                className={`w-full bg-[#182c35] border rounded-lg px-2.5 py-1.5 text-xs font-bold outline-none transition cursor-pointer text-slate-200 ${
                   sortBy !== 'default' 
-                    ? 'border-purple-500 bg-purple-50/70 text-purple-950 font-black ring-1 ring-purple-400/40' 
-                    : 'border-stone-200 text-stone-700 hover:border-stone-300'
+                    ? 'border-cyan-500 bg-[#0e3b43] text-cyan-200 font-black ring-1 ring-cyan-400/40' 
+                    : 'border-[#22404e] hover:border-cyan-500/50'
                 }`}
               >
-                <option value="default">الترتيب الافتراضي</option>
-                <option value="priority_desc">الأعلى أولوية أولاً (عاجلة ⬅ منخفضة)</option>
-                <option value="deadline_asc">الأقرب موعداً أولاً (حسب تاريخ التسليم)</option>
-                <option value="deadline_desc">الأبعد موعداً أولاً</option>
-                <option value="newest">الأحدث إضافة أولاً</option>
-                <option value="progress_desc">الأعلى نسبة إنجاز أولاً</option>
+                <option value="default" className="bg-[#132229]">الترتيب الافتراضي</option>
+                <option value="priority_desc" className="bg-[#132229]">الأعلى أولوية أولاً (عاجلة ⬅ منخفضة)</option>
+                <option value="deadline_asc" className="bg-[#132229]">الأقرب موعداً أولاً (حسب تاريخ التسليم)</option>
+                <option value="deadline_desc" className="bg-[#132229]">الأبعد موعداً أولاً</option>
+                <option value="newest" className="bg-[#132229]">الأحدث إضافة أولاً</option>
+                <option value="progress_desc" className="bg-[#132229]">الأعلى نسبة إنجاز أولاً</option>
               </select>
             </div>
 
@@ -938,34 +905,34 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
 
           {/* Active Filter Pills for quick one-click removal */}
           {activeAdvancedFiltersCount > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-stone-100">
-              <span className="text-[10px] font-bold text-stone-400">الفلاتر المطبقة:</span>
+            <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-[#1b3440]">
+              <span className="text-[10px] font-bold text-slate-400">الفلاتر المطبقة:</span>
               
               {selectedPriority !== 'all' && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-bold border border-amber-300">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#0e3b43] text-cyan-200 text-[10px] font-bold border border-cyan-500/40">
                   <span>أولوية: {selectedPriority === 'urgent' ? 'عاجلة' : selectedPriority === 'high' ? 'مرتفعة' : selectedPriority === 'medium' ? 'متوسطة' : 'منخفضة'}</span>
-                  <button type="button" onClick={() => setSelectedPriority('all')} className="hover:text-amber-950 cursor-pointer">×</button>
+                  <button type="button" onClick={() => setSelectedPriority('all')} className="hover:text-white cursor-pointer">×</button>
                 </span>
               )}
 
               {selectedMemberId !== 'all' && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-900 text-[10px] font-bold border border-blue-300">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#182c35] text-cyan-200 text-[10px] font-bold border border-[#22404e]">
                   <span>المسؤول: {teamMembers.find(m => m.id === selectedMemberId)?.name}</span>
-                  <button type="button" onClick={() => setSelectedMemberId('all')} className="hover:text-blue-950 cursor-pointer">×</button>
+                  <button type="button" onClick={() => setSelectedMemberId('all')} className="hover:text-white cursor-pointer">×</button>
                 </span>
               )}
 
               {dateFilter !== 'all' && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-[10px] font-bold border border-emerald-300">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#182c35] text-cyan-200 text-[10px] font-bold border border-[#22404e]">
                   <span>التاريخ: {dateFilter === 'today' ? 'اليوم' : dateFilter === 'this_week' ? 'هذا الأسبوع' : dateFilter === 'overdue' ? 'المتأخرة' : dateFilter === 'has_date' ? 'لها تاريخ' : 'بدون تاريخ'}</span>
-                  <button type="button" onClick={() => setDateFilter('all')} className="hover:text-emerald-950 cursor-pointer">×</button>
+                  <button type="button" onClick={() => setDateFilter('all')} className="hover:text-white cursor-pointer">×</button>
                 </span>
               )}
 
               {sortBy !== 'default' && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-100 text-purple-900 text-[10px] font-bold border border-purple-200">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#182c35] text-cyan-200 text-[10px] font-bold border border-[#22404e]">
                   <span>الترتيب: {sortBy === 'priority_desc' ? 'الأعلى أولوية' : sortBy === 'deadline_asc' ? 'الأقرب موعداً' : sortBy === 'newest' ? 'الأحدث' : sortBy === 'progress_desc' ? 'الأعلى إنجازاً' : 'الأبعد موعداً'}</span>
-                  <button type="button" onClick={() => setSortBy('default')} className="hover:text-purple-950 cursor-pointer">×</button>
+                  <button type="button" onClick={() => setSortBy('default')} className="hover:text-white cursor-pointer">×</button>
                 </span>
               )}
             </div>
@@ -979,10 +946,10 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
         3. SINGLE-LINE COMPACT ROWS (مبدأ الكتابة في سطر واحد لتصغير الارتفاعات)
         ========================================================================
       */}
-      <div className="bg-white rounded-2xl border border-stone-200/80 overflow-hidden shadow-xs">
+      <div className="bg-[#132229] rounded-2xl border border-[#1c3542] overflow-hidden shadow-xs text-white">
         
         {/* Table/List Header */}
-        <div className="hidden lg:grid grid-cols-12 gap-2 px-3 py-2 bg-stone-100/90 text-stone-500 font-bold text-[11px] border-b border-stone-200">
+        <div className="hidden lg:grid grid-cols-12 gap-2 px-3 py-2 bg-[#101c22] text-slate-400 font-bold text-[11px] border-b border-[#1b3440]">
           <div className="col-span-4 flex items-center gap-2">
             <span className="w-5"></span>
             <span className="w-5"></span>
@@ -997,15 +964,15 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
 
         {/* Tasks List */}
         {filteredTasks.length === 0 ? (
-          <div className="p-8 text-center text-stone-400 text-xs">
-            <Layers className="w-8 h-8 text-stone-300 mx-auto mb-2" />
-            <p className="font-bold text-stone-600">لا توجد مهام مطابقة لخيارات الفلترة الحالية</p>
-            <p className="mt-1 text-stone-400">يمكنك تغيير فلتر المشروع أو إنشاء مهمة أو مشروع جديد</p>
+          <div className="p-8 text-center text-slate-400 text-xs">
+            <Layers className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+            <p className="font-bold text-slate-200">لا توجد مهام مطابقة لخيارات الفلترة الحالية</p>
+            <p className="mt-1 text-slate-400">يمكنك تغيير فلتر المشروع أو إنشاء مهمة أو مشروع جديد</p>
             <div className="flex items-center justify-center gap-2.5 mt-3">
               <button
                 type="button"
                 onClick={() => onOpenCreateTask(singleSelectedProject?.id)}
-                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold rounded-xl text-xs flex items-center gap-1 cursor-pointer shadow-xs transition"
+                className="px-3 py-1.5 bg-[#088395] hover:bg-[#0aa0b6] text-white font-bold rounded-xl text-xs flex items-center gap-1 cursor-pointer shadow-xs transition"
               >
                 <Plus className="w-3.5 h-3.5 stroke-[3]" />
                 <span>+ إضافة مهمة</span>
@@ -1013,7 +980,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
               <button
                 type="button"
                 onClick={onOpenCreateProject}
-                className="px-3 py-1.5 bg-stone-900 hover:bg-stone-800 text-amber-300 font-bold rounded-xl text-xs flex items-center gap-1 border border-stone-700 cursor-pointer shadow-xs transition"
+                className="px-3 py-1.5 bg-[#182c35] hover:bg-[#203a46] text-cyan-300 font-bold rounded-xl text-xs flex items-center gap-1 border border-[#22404e] cursor-pointer shadow-xs transition"
               >
                 <Plus className="w-3.5 h-3.5 stroke-[3]" />
                 <span>+ إضافة مشروع</span>
@@ -1021,7 +988,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
             </div>
           </div>
         ) : (
-          <div className="divide-y divide-stone-100">
+          <div className="divide-y divide-[#1b3440]">
             {filteredTasks.map(task => {
               const project = projects.find(p => p.id === task.projectId);
               const progress = calculateTaskProgress(task);
@@ -1038,7 +1005,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                 <div 
                   key={task.id} 
                   className={`transition-colors ${
-                    isExpanded ? 'bg-amber-50/25 ring-1 ring-amber-400/50' : 'hover:bg-stone-50/70'
+                    isExpanded ? 'bg-[#101c22]/90 ring-1 ring-cyan-500/40' : 'hover:bg-[#182c35]/50'
                   }`}
                 >
                   
@@ -1047,7 +1014,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                   */}
                   <div 
                     onClick={() => setExpandedTaskId(isExpanded ? null : task.id)}
-                    className="lg:hidden p-2.5 flex items-center justify-between gap-2.5 cursor-pointer hover:bg-stone-50/80 transition"
+                    className="lg:hidden p-2.5 flex items-center justify-between gap-2.5 cursor-pointer hover:bg-[#182c35]/40 transition"
                   >
                     {/* Checkbox + Compressed Title & Subline */}
                     <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -1056,7 +1023,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                         onClick={(e) => handleToggleTaskCompleted(task, e)}
                         title={isCompleted ? 'إلغاء الإكمال والتراجع عن إغلاق المهمة' : 'تعليم المهمة كمكتملة'}
                         className={`p-0.5 rounded transition shrink-0 cursor-pointer ${
-                          isCompleted ? 'text-emerald-600' : 'text-stone-300 hover:text-amber-600'
+                          isCompleted ? 'text-emerald-400' : 'text-slate-500 hover:text-cyan-400'
                         }`}
                       >
                         {isCompleted ? <CheckCircle2 className="w-5 h-5" /> : <Circle className="w-5 h-5" />}
@@ -1069,23 +1036,23 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                           <span 
                             className={`w-2.5 h-2.5 rounded-full shrink-0 ring-2 shadow-2xs ${
                               isCompleted 
-                                ? 'bg-stone-400 ring-stone-200' 
+                                ? 'bg-slate-500 ring-slate-700' 
                                 : deadline.isOverdue 
-                                ? 'bg-red-500 ring-red-200 animate-pulse' 
-                                : 'bg-emerald-500 ring-emerald-200'
+                                ? 'bg-red-500 ring-red-900/60 animate-pulse' 
+                                : 'bg-emerald-500 ring-emerald-900/60'
                             }`}
                             title={isCompleted ? 'مكتملة' : deadline.isOverdue ? 'متأخرة عن الموعد' : 'قيد التنفيذ / جارية'}
                           />
                           <span 
                             className={`text-xs font-bold truncate ${
-                              isCompleted ? 'line-through text-stone-400' : 'text-stone-900'
+                              isCompleted ? 'line-through text-slate-500' : 'text-white'
                             }`}
                             title={task.title}
                           >
                             {task.title}
                           </span>
                           {deadline.isOverdue && !isCompleted && (
-                            <span className="bg-red-100 text-red-800 text-[9px] font-black px-1.5 py-0.2 rounded shrink-0">
+                            <span className="bg-red-950/80 text-red-300 border border-red-800 text-[9px] font-black px-1.5 py-0.2 rounded shrink-0">
                               متأخرة
                             </span>
                           )}
@@ -1095,26 +1062,26 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                             </span>
                           )}
                           {task.priority === 'high' && (
-                            <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-bold px-1.5 py-0.2 rounded shrink-0">
+                            <span className="bg-[#0e3b43] text-cyan-300 border border-cyan-500/40 text-[9px] font-bold px-1.5 py-0.2 rounded shrink-0">
                               مرتفعة
                             </span>
                           )}
                         </div>
 
                         {/* Minimal 2nd line: Project • Assignee • Progress */}
-                        <div className="flex items-center gap-2 mt-0.5 text-[10px] text-stone-500">
+                        <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-400">
                           {project && (
-                            <span className="font-semibold text-stone-700 truncate max-w-[95px] flex items-center gap-1">
-                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${project.color || 'bg-amber-500'}`}></span>
+                            <span className="font-semibold text-slate-300 truncate max-w-[95px] flex items-center gap-1">
+                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${project.color || 'bg-cyan-500'}`}></span>
                               <span className="truncate">{project.name}</span>
                             </span>
                           )}
                           {waitingInfo.responsibleMember && (
-                            <span className="font-medium text-stone-600 truncate max-w-[75px]">
+                            <span className="font-medium text-slate-400 truncate max-w-[75px]">
                               {waitingInfo.responsibleMember.name.split(' ')[0]}
                             </span>
                           )}
-                          <span className="font-mono font-bold text-stone-700 bg-stone-100 px-1 rounded" dir="ltr">
+                          <span className="font-mono font-bold text-cyan-300 bg-[#182c35] px-1 rounded border border-[#22404e]" dir="ltr">
                             {progress}%
                           </span>
                           {task.externalLink && (
@@ -1123,7 +1090,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                               target="_blank"
                               rel="noopener noreferrer"
                               onClick={(e) => e.stopPropagation()}
-                              className="text-blue-600 hover:text-blue-800 p-0.5"
+                              className="text-cyan-400 hover:text-cyan-300 p-0.5"
                               title="فتح الرابط"
                             >
                               <Link2 className="w-3 h-3" />
@@ -1133,15 +1100,40 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                       </div>
                     </div>
 
-                    {/* PROMINENT FIELD IMAGE (مضغوط لصالح الصور فقط) + Chevron */}
+                    {/* Action buttons (Edit & Delete) clearly visible on mobile + PROMINENT FIELD IMAGE + Chevron */}
                     <div className="flex items-center gap-1.5 shrink-0">
+                      
+                      {/* Mobile Edit and Delete Buttons */}
+                      <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => onOpenEditTask && onOpenEditTask(task)}
+                          className="p-1.5 text-slate-300 hover:text-cyan-300 hover:bg-[#182c35] active:scale-95 rounded-lg transition cursor-pointer"
+                          title="تعديل المهمة"
+                        >
+                          <Edit3 className="w-4 h-4 text-cyan-400" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm(`هل أنت متأكد من رغبتك في حذف مهمة "${task.title}"؟`)) {
+                              onDeleteTask(task.id);
+                            }
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-950/40 active:scale-95 rounded-lg transition cursor-pointer"
+                          title="حذف المهمة"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-400" />
+                        </button>
+                      </div>
+
                       {displayImageUrl ? (
                         <div
                           onClick={(e) => {
                             e.stopPropagation();
                             setLightboxImage({ url: displayImageUrl, caption: task.imageCaption || task.title });
                           }}
-                          className="relative w-11 h-11 rounded-xl overflow-hidden border border-stone-200 shadow-2xs group cursor-pointer shrink-0 bg-stone-100"
+                          className="relative w-11 h-11 rounded-xl overflow-hidden border border-[#22404e] shadow-2xs group cursor-pointer shrink-0 bg-[#182c35]"
                           title="معاينة صورة الموقع وتكبيرها"
                         >
                           <img 
@@ -1149,8 +1141,8 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                             alt={task.title} 
                             className="w-full h-full object-cover group-hover:scale-110 transition duration-200" 
                           />
-                          <div className="absolute inset-0 bg-black/15 group-hover:bg-transparent transition" />
-                          <div className="absolute bottom-0.5 right-0.5 bg-stone-900/80 text-white rounded p-0.5">
+                          <div className="absolute inset-0 bg-black/25 group-hover:bg-transparent transition" />
+                          <div className="absolute bottom-0.5 right-0.5 bg-black/80 text-white rounded p-0.5">
                             <ImageIcon className="w-2.5 h-2.5" />
                           </div>
                         </div>
@@ -1158,7 +1150,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                         <button
                           type="button"
                           onClick={(e) => handleOpenTaskAttachment(task, e)}
-                          className="w-10 h-10 rounded-xl border border-dashed border-stone-300 hover:border-amber-400 bg-stone-50 hover:bg-amber-50/60 flex flex-col items-center justify-center text-stone-400 hover:text-amber-700 transition cursor-pointer shrink-0"
+                          className="w-10 h-10 rounded-xl border border-dashed border-[#22404e] hover:border-cyan-400/60 bg-[#182c35] hover:bg-[#203a46] flex flex-col items-center justify-center text-slate-400 hover:text-cyan-300 transition cursor-pointer shrink-0"
                           title="إرفاق صورة ميدانية للمهمة"
                         >
                           <Camera className="w-3.5 h-3.5" />
@@ -1173,11 +1165,11 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                           e.stopPropagation();
                           setExpandedTaskId(isExpanded ? null : task.id);
                         }}
-                        className="p-1 text-stone-400 hover:text-stone-800 rounded-lg transition shrink-0"
+                        className="p-1 text-slate-400 hover:text-white rounded-lg transition shrink-0"
                         title={isExpanded ? 'طي' : 'عرض الخطوات'}
                       >
                         {isExpanded ? (
-                          <ChevronUp className="w-4 h-4 text-amber-600" />
+                          <ChevronUp className="w-4 h-4 text-cyan-400" />
                         ) : (
                           <ChevronDown className="w-4 h-4" />
                         )}
@@ -1203,11 +1195,11 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                           e.stopPropagation();
                           setExpandedTaskId(isExpanded ? null : task.id);
                         }}
-                        className="p-1 text-stone-400 hover:text-stone-800 rounded transition shrink-0"
+                        className="p-1 text-slate-400 hover:text-white rounded transition shrink-0"
                         title={isExpanded ? 'طي التفاصيل' : 'عرض الخطوات والمرفقات'}
                       >
                         {isExpanded ? (
-                          <ChevronUp className="w-4 h-4 text-amber-600" />
+                          <ChevronUp className="w-4 h-4 text-cyan-400" />
                         ) : (
                           <ChevronDown className="w-4 h-4" />
                         )}
@@ -1219,7 +1211,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                         onClick={(e) => handleToggleTaskCompleted(task, e)}
                         title={isCompleted ? 'إلغاء الإكمال والتراجع عن إغلاق المهمة' : 'تعليم المهمة كمكتملة'}
                         className={`p-0.5 rounded transition shrink-0 cursor-pointer ${
-                          isCompleted ? 'text-emerald-600 hover:text-emerald-700' : 'text-stone-400 hover:text-amber-600'
+                          isCompleted ? 'text-emerald-400 hover:text-emerald-300' : 'text-slate-500 hover:text-cyan-400'
                         }`}
                       >
                         {isCompleted ? (
@@ -1235,16 +1227,16 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                         <span 
                           className={`w-2.5 h-2.5 rounded-full shrink-0 ring-2 shadow-2xs ${
                             isCompleted 
-                              ? 'bg-stone-400 ring-stone-200' 
+                              ? 'bg-slate-500 ring-slate-700' 
                               : deadline.isOverdue 
-                              ? 'bg-red-500 ring-red-200 animate-pulse' 
-                              : 'bg-emerald-500 ring-emerald-200'
+                              ? 'bg-red-500 ring-red-900/60 animate-pulse' 
+                              : 'bg-emerald-500 ring-emerald-900/60'
                           }`}
                           title={isCompleted ? 'مكتملة' : deadline.isOverdue ? 'متأخرة عن الموعد' : 'قيد التنفيذ / جارية'}
                         />
                         <span 
                           className={`text-xs font-bold truncate ${
-                            isCompleted ? 'line-through text-stone-400' : 'text-stone-900'
+                            isCompleted ? 'line-through text-slate-500' : 'text-white'
                           }`}
                           title={task.title}
                         >
@@ -1257,13 +1249,13 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                           </span>
                         )}
                         {task.priority === 'high' && (
-                          <span className="text-[9px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.2 rounded shrink-0">
+                          <span className="text-[9px] font-bold bg-[#0e3b43] text-cyan-300 border border-cyan-500/40 px-1.5 py-0.2 rounded shrink-0">
                             مرتفعة
                           </span>
                         )}
 
                         {task.category && (
-                          <span className="hidden xl:inline-block text-[10px] font-medium bg-stone-100 text-stone-600 px-1.5 py-0.2 rounded shrink-0">
+                          <span className="hidden xl:inline-block text-[10px] font-medium bg-[#182c35] text-slate-300 border border-[#22404e] px-1.5 py-0.2 rounded shrink-0">
                             {task.category}
                           </span>
                         )}
@@ -1274,8 +1266,8 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                     {/* Project Tag */}
                     <div className="col-span-2 w-full flex items-center gap-1.5 shrink-0">
                       {project && (
-                        <div className="inline-flex items-center gap-1 text-[11px] font-semibold text-stone-700 truncate">
-                          <span className={`w-2 h-2 rounded-full shrink-0 ${project.color || 'bg-amber-500'}`}></span>
+                        <div className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-300 truncate">
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${project.color || 'bg-cyan-500'}`}></span>
                           <span className="truncate">{project.name}</span>
                         </div>
                       )}
@@ -1285,10 +1277,10 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                     <div className="col-span-2 w-full flex items-center gap-2 min-w-0">
                       {waitingInfo.responsibleMember ? (
                         <div className="flex items-center gap-1.5 truncate">
-                          <div className={`w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0 ${waitingInfo.responsibleMember.avatarColor || 'bg-amber-600'}`}>
+                          <div className={`w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0 ${waitingInfo.responsibleMember.avatarColor || 'bg-cyan-700'}`}>
                             {waitingInfo.responsibleMember.name.split(' ')[1]?.[0] || waitingInfo.responsibleMember.name[0]}
                           </div>
-                          <span className="text-xs font-bold text-stone-800 truncate">
+                          <span className="text-xs font-bold text-slate-200 truncate">
                             {waitingInfo.responsibleMember.name.split(' ')[0]} {waitingInfo.responsibleMember.name.split(' ')[1] || ''}
                           </span>
                           
@@ -1298,14 +1290,14 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
-                            className="text-emerald-600 hover:text-emerald-700 p-0.5 rounded transition shrink-0"
+                            className="text-emerald-400 hover:text-emerald-300 p-0.5 rounded transition shrink-0"
                             title={`مراسلة واتساب: ${waitingInfo.responsibleMember.name}`}
                           >
                             <MessageSquare className="w-3.5 h-3.5" />
                           </a>
                         </div>
                       ) : (
-                        <span className="text-[11px] text-emerald-700 font-bold flex items-center gap-1">
+                        <span className="text-[11px] text-emerald-400 font-bold flex items-center gap-1">
                           <Check className="w-3.5 h-3.5" /> مكتملة
                         </span>
                       )}
@@ -1313,15 +1305,15 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
 
                     {/* Progress Bar & % */}
                     <div className="col-span-2 w-full flex items-center gap-2">
-                      <div className="flex-1 bg-stone-100 h-1.5 rounded-full overflow-hidden border border-stone-200/50">
+                      <div className="flex-1 bg-[#182c35] h-1.5 rounded-full overflow-hidden border border-[#22404e]">
                         <div 
                           className={`h-full rounded-full transition-all duration-300 ${
-                            progress === 100 ? 'bg-emerald-500' : progress > 50 ? 'bg-amber-500' : 'bg-stone-500'
+                            progress === 100 ? 'bg-emerald-500' : progress > 50 ? 'bg-cyan-400' : 'bg-slate-500'
                           }`}
                           style={{ width: `${progress}%` }}
                         />
                       </div>
-                      <span className="text-[11px] font-bold text-stone-700 w-8 text-left" dir="ltr">
+                      <span className="text-[11px] font-bold text-cyan-300 w-8 text-left" dir="ltr">
                         {progress}%
                       </span>
                     </div>
@@ -1331,15 +1323,15 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                       {deadline.hasDate ? (
                         <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded ${
                           deadline.isOverdue && !isCompleted
-                            ? 'bg-red-100 text-red-800 border border-red-200'
+                            ? 'bg-red-950/80 text-red-300 border border-red-800'
                             : deadline.daysDiff <= 3 && !isCompleted
-                            ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                            : 'bg-stone-100 text-stone-600'
+                            ? 'bg-amber-950/80 text-amber-300 border border-amber-800'
+                            : 'bg-[#182c35] text-slate-300 border border-[#22404e]'
                         }`}>
                           {deadline.badgeText}
                         </span>
                       ) : (
-                        <span className="text-[10px] text-stone-400">بدون تاريخ</span>
+                        <span className="text-[10px] text-slate-500">بدون تاريخ</span>
                       )}
                     </div>
 
@@ -1354,7 +1346,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                           rel="noopener noreferrer"
                           onClick={(e) => e.stopPropagation()}
                           className={`p-1 rounded transition ${
-                            isGoogleSheet ? 'text-emerald-700 hover:bg-emerald-50' : 'text-blue-700 hover:bg-blue-50'
+                            isGoogleSheet ? 'text-emerald-400 hover:bg-emerald-950/40' : 'text-cyan-400 hover:bg-cyan-950/40'
                           }`}
                           title={task.externalLinkLabel || 'فتح الرابط في علامة تبويب جديدة'}
                         >
@@ -1376,7 +1368,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                             e.stopPropagation();
                             setLightboxImage({ url: displayImageUrl, caption: task.imageCaption || task.title });
                           }}
-                          className="relative w-7 h-7 rounded-md overflow-hidden border border-stone-300 hover:scale-110 transition cursor-pointer shadow-2xs"
+                          className="relative w-7 h-7 rounded-md overflow-hidden border border-[#22404e] hover:scale-110 transition cursor-pointer shadow-2xs"
                           title="معاينة الصورة المرفقة"
                         >
                           <img src={displayImageUrl} alt="" className="w-full h-full object-cover" />
@@ -1387,10 +1379,23 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                       <button
                         type="button"
                         onClick={(e) => handleOpenTaskAttachment(task, e)}
-                        className="p-1 text-stone-400 hover:text-amber-700 rounded transition cursor-pointer"
+                        className="p-1 text-slate-400 hover:text-cyan-300 rounded transition cursor-pointer"
                         title="إضافة أو تعديل الروابط والصور"
                       >
                         <Link2 className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* Edit Task button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onOpenEditTask) onOpenEditTask(task);
+                        }}
+                        className="p-1 text-slate-400 hover:text-cyan-300 rounded transition cursor-pointer"
+                        title="تعديل المهمة"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
                       </button>
 
                       {/* Delete Task button */}
@@ -1398,11 +1403,11 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (confirm(`هل أنت متأكد من حذف مهمة "${task.title}"؟`)) {
+                          if (window.confirm(`هل أنت متأكد من حذف مهمة "${task.title}"؟`)) {
                             onDeleteTask(task.id);
                           }
                         }}
-                        className="p-1 text-stone-400 hover:text-red-600 rounded transition cursor-pointer"
+                        className="p-1 text-slate-400 hover:text-red-400 rounded transition cursor-pointer"
                         title="حذف المهمة"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -1418,27 +1423,27 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                     ========================================================================
                   */}
                   {isExpanded && (
-                    <div className="p-4 bg-stone-50/60 border-t border-stone-200 space-y-4 animate-fadeIn">
+                    <div className="p-4 bg-[#101c22] border-t border-[#1c3542] space-y-4 animate-fadeIn">
                       
                       {/* Subtasks Bar Header with View Mode Switcher */}
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-stone-900">
+                          <span className="text-xs font-bold text-white">
                             الخطوات ({task.subtasks.length}):
                           </span>
-                          <span className="text-[11px] text-stone-500 hidden sm:inline">
+                          <span className="text-[11px] text-slate-400 hidden sm:inline">
                             يمكن تعديل أي خطوة أو التراجع عن إكمالها في أي وقت
                           </span>
                         </div>
 
                         <div className="flex items-center gap-2">
                           {/* Switch between Table View and Visual Pipeline */}
-                          <div className="bg-stone-200 p-0.5 rounded-lg flex items-center text-[10px] font-bold">
+                          <div className="bg-[#182c35] p-0.5 rounded-lg flex items-center text-[10px] font-bold border border-[#22404e]">
                             <button
                               type="button"
                               onClick={() => setTaskViewMode(prev => ({ ...prev, [task.id]: 'table' }))}
                               className={`px-2 py-0.5 rounded-md transition ${
-                                currentMode === 'table' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-600'
+                                currentMode === 'table' ? 'bg-[#088395] text-white shadow-xs' : 'text-slate-400 hover:text-white'
                               }`}
                             >
                               قائمة سطرية
@@ -1447,7 +1452,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                               type="button"
                               onClick={() => setTaskViewMode(prev => ({ ...prev, [task.id]: 'pipeline' }))}
                               className={`px-2 py-0.5 rounded-md transition ${
-                                currentMode === 'pipeline' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-600'
+                                currentMode === 'pipeline' ? 'bg-[#088395] text-white shadow-xs' : 'text-slate-400 hover:text-white'
                               }`}
                             >
                               مسار تسلسلي
@@ -1457,7 +1462,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                           <button
                             type="button"
                             onClick={() => onAddSubtask(task.id)}
-                            className="text-[11px] font-bold text-amber-900 bg-amber-200/80 hover:bg-amber-300 px-2.5 py-1 rounded-lg transition flex items-center gap-1"
+                            className="text-[11px] font-bold text-cyan-200 bg-[#0e3b43] hover:bg-[#134e5a] border border-cyan-500/40 px-2.5 py-1 rounded-lg transition flex items-center gap-1 cursor-pointer"
                           >
                             <Plus className="w-3 h-3" />
                             <span>+ إضافة خطوة</span>
@@ -1467,7 +1472,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
 
                       {/* MODE 1: COMPACT SINGLE-LINE SUBTASK TABLE (مع إمكانية التراجع والتعديل الكامل) */}
                       {currentMode === 'table' ? (
-                        <div className="bg-white rounded-xl border border-stone-200 overflow-hidden divide-y divide-stone-100">
+                        <div className="bg-[#132229] rounded-xl border border-[#1c3542] overflow-hidden divide-y divide-[#1b3440]">
                           {task.subtasks.map((step, idx) => {
                             const isStepDone = step.status === 'completed';
                             const assigned = teamMembers.find(m => m.id === step.assignedMemberId);
@@ -1475,7 +1480,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                             return (
                               <div 
                                 key={step.id} 
-                                className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2 px-3 text-xs hover:bg-stone-50 transition"
+                                className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2 px-3 text-xs hover:bg-[#182c35]/40 transition"
                               >
                                 {/* Checkbox + Step Title */}
                                 <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -1491,7 +1496,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                                     }}
                                     title={isStepDone ? 'إلغاء الإكمال والتراجع عن إنهاء الخطوة' : 'تعليم الخطوة كمكتملة'}
                                     className={`cursor-pointer transition shrink-0 ${
-                                      isStepDone ? 'text-emerald-600' : 'text-stone-300 hover:text-amber-600'
+                                      isStepDone ? 'text-emerald-400' : 'text-slate-500 hover:text-cyan-400'
                                     }`}
                                   >
                                     {isStepDone ? (
@@ -1501,7 +1506,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                                     )}
                                   </button>
 
-                                  <span className="text-[11px] font-bold text-stone-400 w-5 shrink-0">
+                                  <span className="text-[11px] font-bold text-slate-500 w-5 shrink-0">
                                     #{idx + 1}
                                   </span>
 
@@ -1510,8 +1515,8 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                                     type="text"
                                     value={step.title}
                                     onChange={(e) => handleUpdateSubtask(task.id, step.id, { title: e.target.value })}
-                                    className={`w-full bg-transparent border border-transparent hover:border-stone-200 focus:border-amber-400 rounded px-1 py-0.5 font-bold outline-none ${
-                                      isStepDone ? 'line-through text-stone-400' : 'text-stone-800'
+                                    className={`w-full bg-transparent border border-transparent hover:border-[#22404e] focus:border-cyan-400 rounded px-1 py-0.5 font-bold outline-none ${
+                                      isStepDone ? 'line-through text-slate-500' : 'text-white'
                                     }`}
                                   />
                                 </div>
@@ -1521,10 +1526,10 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                                   <select
                                     value={step.assignedMemberId}
                                     onChange={(e) => handleUpdateSubtask(task.id, step.id, { assignedMemberId: e.target.value })}
-                                    className="bg-stone-50 border border-stone-200 rounded-lg px-2 py-0.5 text-[11px] text-stone-700 outline-none"
+                                    className="bg-[#182c35] border border-[#22404e] rounded-lg px-2 py-0.5 text-[11px] text-slate-200 outline-none"
                                   >
                                     {teamMembers.map(m => (
-                                      <option key={m.id} value={m.id}>
+                                      <option key={m.id} value={m.id} className="bg-[#132229]">
                                         {m.name} ({m.role})
                                       </option>
                                     ))}
@@ -1533,7 +1538,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                                   {assigned && (
                                     <a
                                       href={`tel:${assigned.phone}`}
-                                      className="p-1 text-stone-400 hover:text-stone-700"
+                                      className="p-1 text-slate-400 hover:text-cyan-300"
                                       title={`اتصال: ${assigned.phone}`}
                                     >
                                       <Phone className="w-3 h-3" />
@@ -1554,18 +1559,18 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                                     }}
                                     className={`text-[11px] font-bold py-0.5 px-2 rounded-lg border outline-none ${
                                       step.status === 'completed'
-                                        ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                        ? 'bg-emerald-950/70 text-emerald-300 border-emerald-800'
                                         : step.status === 'in_progress'
-                                        ? 'bg-amber-50 text-amber-900 border-amber-300'
+                                        ? 'bg-[#0e3b43] text-cyan-200 border-cyan-500/50'
                                         : step.status === 'blocked'
-                                        ? 'bg-red-50 text-red-800 border-red-300'
-                                        : 'bg-stone-50 text-stone-600 border-stone-200'
+                                        ? 'bg-red-950/70 text-red-300 border-red-800'
+                                        : 'bg-[#182c35] text-slate-400 border-[#22404e]'
                                     }`}
                                   >
-                                    <option value="pending">⏳ انتظار</option>
-                                    <option value="in_progress">⚙️ قيد التنفيذ</option>
-                                    <option value="completed">✅ مكتملة</option>
-                                    <option value="blocked">⛔ معطلة</option>
+                                    <option value="pending" className="bg-[#132229]">⏳ انتظار</option>
+                                    <option value="in_progress" className="bg-[#132229]">⚙️ قيد التنفيذ</option>
+                                    <option value="completed" className="bg-[#132229]">✅ مكتملة</option>
+                                    <option value="blocked" className="bg-[#132229]">⛔ معطلة</option>
                                   </select>
 
                                   {/* Prominent Undo Button if completed */}
@@ -1573,7 +1578,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                                     <button
                                       type="button"
                                       onClick={() => handleUpdateSubtask(task.id, step.id, { status: 'pending', completedAt: undefined })}
-                                      className="text-[10px] text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5"
+                                      className="text-[10px] text-cyan-200 bg-[#0e3b43] hover:bg-[#134e5a] border border-cyan-500/40 px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5 cursor-pointer"
                                       title="تراجع عن إكمال هذه الخطوة"
                                     >
                                       <RotateCcw className="w-2.5 h-2.5" />
@@ -1587,7 +1592,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                                       href={step.externalLink}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="p-1 text-emerald-600 hover:text-emerald-800"
+                                      className="p-1 text-cyan-400 hover:text-cyan-300"
                                       title={step.externalLinkLabel || 'فتح رابط الخطوة'}
                                     >
                                       <Link2 className="w-3.5 h-3.5" />
@@ -1599,7 +1604,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                                     <button
                                       type="button"
                                       onClick={() => setLightboxImage({ url: step.imageUrl!, caption: step.imageCaption || step.title })}
-                                      className="p-1 text-blue-600 hover:text-blue-800 cursor-pointer"
+                                      className="p-1 text-cyan-400 hover:text-cyan-300 cursor-pointer"
                                       title="معاينة صورة الخطوة"
                                     >
                                       <ImageIcon className="w-3.5 h-3.5" />
@@ -1610,7 +1615,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                                   <button
                                     type="button"
                                     onClick={() => handleOpenSubtaskAttachment(task, step)}
-                                    className="p-1 text-stone-400 hover:text-amber-700"
+                                    className="p-1 text-slate-400 hover:text-cyan-300 cursor-pointer"
                                     title="إضافة أو تعديل رابط أو صورة لهذه الخطوة الفرعية"
                                   >
                                     <Plus className="w-3 h-3" />
@@ -1622,7 +1627,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                                       type="button"
                                       disabled={idx === 0}
                                       onClick={() => handleMoveSubtask(task.id, idx, 'earlier')}
-                                      className="text-stone-400 hover:text-amber-700 disabled:opacity-20 p-0.5 cursor-pointer"
+                                      className="text-slate-400 hover:text-cyan-300 disabled:opacity-20 p-0.5 cursor-pointer"
                                       title="تقديم الخطوة للأمام في الترتيب"
                                     >
                                       <ChevronUp className="w-3 h-3" />
@@ -1631,7 +1636,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                                       type="button"
                                       disabled={idx === task.subtasks.length - 1}
                                       onClick={() => handleMoveSubtask(task.id, idx, 'later')}
-                                      className="text-stone-400 hover:text-amber-700 disabled:opacity-20 p-0.5 cursor-pointer"
+                                      className="text-slate-400 hover:text-cyan-300 disabled:opacity-20 p-0.5 cursor-pointer"
                                       title="تأخير الخطوة للخلف في الترتيب"
                                     >
                                       <ChevronDown className="w-3 h-3" />
@@ -1643,7 +1648,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                                     <button
                                       type="button"
                                       onClick={() => handleDeleteSubtask(task.id, step.id)}
-                                      className="p-1 text-stone-300 hover:text-red-600"
+                                      className="p-1 text-slate-500 hover:text-red-400 cursor-pointer"
                                       title="حذف الخطوة"
                                     >
                                       <Trash2 className="w-3 h-3" />
@@ -1656,7 +1661,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                         </div>
                       ) : (
                         /* MODE 2: VISUAL PIPELINE */
-                        <div className="bg-white p-3 rounded-xl border border-stone-200">
+                        <div className="bg-[#132229] p-3 rounded-xl border border-[#1c3542]">
                           <TaskPipeline
                             subtasks={task.subtasks}
                             teamMembers={teamMembers}
@@ -1672,42 +1677,42 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                       )}
 
                       {/* Main Task Attached Link & Image Bar */}
-                      <div className="bg-white p-3 rounded-xl border border-stone-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+                      <div className="bg-[#132229] p-3 rounded-xl border border-[#1c3542] flex flex-wrap items-center justify-between gap-3 text-xs text-white">
                         <div className="flex flex-wrap items-center gap-4">
                           
                           {/* Link info */}
                           <div className="flex items-center gap-2">
-                            <span className="text-[11px] font-bold text-stone-400">الرابط المرفق:</span>
+                            <span className="text-[11px] font-bold text-slate-400">الرابط المرفق:</span>
                             {task.externalLink ? (
                               <a
                                 href={task.externalLink}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="font-bold text-emerald-800 hover:underline flex items-center gap-1"
+                                className="font-bold text-cyan-300 hover:underline flex items-center gap-1"
                               >
-                                {isGoogleSheet ? <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> : <Link2 className="w-3.5 h-3.5 text-blue-600" />}
+                                {isGoogleSheet ? <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" /> : <Link2 className="w-3.5 h-3.5 text-cyan-400" />}
                                 <span>{task.externalLinkLabel || 'فتح الرابط'}</span>
                                 <ExternalLink className="w-2.5 h-2.5" />
                               </a>
                             ) : (
-                              <span className="text-stone-400 text-[11px]">لا يوجد رابط لشيت أو درايف</span>
+                              <span className="text-slate-500 text-[11px]">لا يوجد رابط لشيت أو درايف</span>
                             )}
                           </div>
 
                           {/* Image info */}
                           <div className="flex items-center gap-2">
-                            <span className="text-[11px] font-bold text-stone-400">الصورة المرفقة:</span>
+                            <span className="text-[11px] font-bold text-slate-400">الصورة المرفقة:</span>
                             {task.imageUrl ? (
                               <button
                                 type="button"
                                 onClick={() => setLightboxImage({ url: task.imageUrl!, caption: task.imageCaption || task.title })}
-                                className="font-bold text-blue-700 hover:underline flex items-center gap-1.5 cursor-pointer"
+                                className="font-bold text-cyan-300 hover:underline flex items-center gap-1.5 cursor-pointer"
                               >
-                                <img src={task.imageUrl} alt="" className="w-6 h-6 rounded-md object-cover border border-stone-200 shrink-0" />
+                                <img src={task.imageUrl} alt="" className="w-6 h-6 rounded-md object-cover border border-[#22404e] shrink-0" />
                                 <span>{task.imageCaption || 'معاينة الصورة'}</span>
                               </button>
                             ) : (
-                              <span className="text-stone-400 text-[11px]">لا توجد صورة موقع</span>
+                              <span className="text-slate-500 text-[11px]">لا توجد صورة موقع</span>
                             )}
                           </div>
 
@@ -1717,8 +1722,18 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
+                            onClick={() => onOpenEditTask && onOpenEditTask(task)}
+                            className="px-2.5 py-1 bg-[#088395] hover:bg-[#0aa0b6] text-white rounded-lg font-bold flex items-center gap-1 transition cursor-pointer shadow-2xs"
+                            title="تعديل المهمة بالكامل"
+                          >
+                            <Edit3 className="w-3 h-3 stroke-[2.5]" />
+                            <span>تعديل المهمة</span>
+                          </button>
+
+                          <button
+                            type="button"
                             onClick={() => handleOpenTaskAttachment(task)}
-                            className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-lg font-bold flex items-center gap-1 transition"
+                            className="px-2.5 py-1 bg-[#182c35] hover:bg-[#203a46] text-cyan-200 border border-[#22404e] rounded-lg font-bold flex items-center gap-1 transition cursor-pointer"
                           >
                             <Link2 className="w-3 h-3" />
                             <span>إدارة روابط وصور المهمة</span>
@@ -1728,7 +1743,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
                           <button
                             type="button"
                             onClick={() => setExpandedTaskId(null)}
-                            className="px-2.5 py-1 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg font-bold transition"
+                            className="px-2.5 py-1 bg-[#182c35] hover:bg-[#203a46] text-slate-300 rounded-lg font-bold transition cursor-pointer border border-[#22404e]"
                           >
                             طي المهمة
                           </button>
@@ -1746,8 +1761,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
         )}
 
       </div>
-      </>
-      )}
+
 
       {/* 
         ========================================================================

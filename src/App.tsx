@@ -20,16 +20,22 @@ import { AllTasksView } from './components/AllTasksView';
 import { ProjectsView } from './components/ProjectsView';
 import { TeamView } from './components/TeamView';
 import { CreateTaskModal } from './components/CreateTaskModal';
+import { EditTaskModal } from './components/EditTaskModal';
 import { CreateProjectModal } from './components/CreateProjectModal';
 import { NotificationsModal } from './components/NotificationsModal';
 import { PlatformAdviceModal } from './components/PlatformAdviceModal';
 import { GoogleSheetsModal } from './components/GoogleSheetsModal';
+import { SettingsModal, DEFAULT_WHATSAPP_TEMPLATE } from './components/SettingsModal';
 import { RotateCcw, Sparkles, CheckCircle2, X } from 'lucide-react';
 import { 
   initWebNotifications, 
   sendWebNotification 
 } from './utils/webNotificationService';
 import { downloadTasksJSON } from './utils/backupUtils';
+import { 
+  computePipelineStatusOnSubtaskChange, 
+  canUpdatePipelineStatusManually 
+} from './utils/pipelineUtils';
 
 export default function App() {
   // Local storage state initialization with fallbacks
@@ -63,21 +69,42 @@ export default function App() {
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
     try {
       const saved = localStorage.getItem('bunyan_notifications');
-      return saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
+      const raw: AppNotification[] = saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
+      const seen = new Set<string>();
+      const deduplicated: AppNotification[] = [];
+      raw.forEach((n, idx) => {
+        let id = n.id || `notif-${Date.now()}-${idx}`;
+        if (seen.has(id)) {
+          id = `${id}-${Math.random().toString(36).slice(2, 7)}`;
+        }
+        seen.add(id);
+        deduplicated.push({ ...n, id });
+      });
+      return deduplicated;
     } catch {
       return INITIAL_NOTIFICATIONS;
     }
   });
 
+  // Custom WhatsApp template state
+  const [customWhatsAppTemplate, setCustomWhatsAppTemplate] = useState<string>(() => {
+    return localStorage.getItem('bunyan_whatsapp_template') || DEFAULT_WHATSAPP_TEMPLATE;
+  });
+
+  // Server synchronization loaded flag
+  const [isServerLoaded, setIsServerLoaded] = useState(false);
+
   // Navigation & Modals: default to 'glance' ('ملخص') view per user request
   const [activeTab, setActiveTab] = useState<ActiveTab>('glance');
   const [selectedProjectId, setSelectedProjectId] = useState<string>('all');
   const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [targetProjectForNewTask, setTargetProjectForNewTask] = useState<string | undefined>(undefined);
   const [targetDateForNewTask, setTargetDateForNewTask] = useState<string | undefined>(undefined);
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isAdviceOpen, setIsAdviceOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGoogleSheetsOpen, setIsGoogleSheetsOpen] = useState(false);
 
   // Initialize Web Notifications & Service Worker on mount
@@ -85,26 +112,111 @@ export default function App() {
     initWebNotifications();
   }, []);
 
-  // Sync to localStorage
+  // Fetch unified server company database on mount (unifies Mobile & PC seamlessly)
+  useEffect(() => {
+    const fetchServerData = async () => {
+      try {
+        const res = await fetch('/api/company-data');
+        if (res.ok) {
+          const data = await res.json();
+          if (data && Array.isArray(data.projects)) {
+            setProjects(data.projects);
+            setTasks(data.tasks || []);
+            setTeamMembers(data.teamMembers || INITIAL_MEMBERS);
+            if (data.notifications && Array.isArray(data.notifications)) {
+              setNotifications(data.notifications);
+            }
+            if (data.whatsappTemplate) {
+              setCustomWhatsAppTemplate(data.whatsappTemplate);
+              localStorage.setItem('bunyan_whatsapp_template', data.whatsappTemplate);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Working in local fallback mode:', err);
+      } finally {
+        setIsServerLoaded(true);
+      }
+    };
+
+    fetchServerData();
+  }, []);
+
+  // Sync to localStorage and Server Database
   useEffect(() => {
     try {
       localStorage.setItem('bunyan_projects', JSON.stringify(projects));
       localStorage.setItem('bunyan_tasks', JSON.stringify(tasks));
       localStorage.setItem('bunyan_team', JSON.stringify(teamMembers));
       localStorage.setItem('bunyan_notifications', JSON.stringify(notifications));
+      localStorage.setItem('bunyan_whatsapp_template', customWhatsAppTemplate);
     } catch (e) {
       console.error('Failed to sync to localStorage', e);
     }
-  }, [projects, tasks, teamMembers, notifications]);
 
-  // Task Update Handler (with automatic Web Notifications)
+    if (!isServerLoaded) return;
+
+    // Send persistent update to Express server file storage
+    const timer = setTimeout(async () => {
+      try {
+        await fetch('/api/company-data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projects,
+            tasks,
+            teamMembers,
+            notifications,
+            whatsappTemplate: customWhatsAppTemplate,
+          }),
+        });
+      } catch (e) {
+        console.error('Failed to sync data to server', e);
+      }
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [projects, tasks, teamMembers, notifications, customWhatsAppTemplate, isServerLoaded]);
+
+  const handleSaveWhatsAppTemplate = (template: string) => {
+    setCustomWhatsAppTemplate(template);
+    localStorage.setItem('bunyan_whatsapp_template', template);
+    fetch('/api/company-data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projects,
+        tasks,
+        teamMembers,
+        notifications,
+        whatsappTemplate: template,
+      }),
+    }).catch(() => {});
+  };
+
+  // Task Update Handler (with automatic Web Notifications & Sequential Pipeline logic)
   const handleUpdateTask = (taskId: string, updates: Partial<Task>) => {
     setTasks(prev => prev.map(task => {
       if (task.id === taskId) {
-        const updated = { ...task, ...updates };
+        let computedStatus = updates.status !== undefined ? updates.status : task.status;
 
         // 1. Detect subtask status changes and trigger Web Notifications
         if (updates.subtasks) {
+          const changedSubtask = updates.subtasks.find(step => {
+            const oldStep = task.subtasks.find(os => os.id === step.id);
+            return oldStep && oldStep.status !== step.status;
+          });
+
+          // Compute sequential pipeline status if status was not explicitly forced
+          if (changedSubtask && updates.status === undefined) {
+            computedStatus = computePipelineStatusOnSubtaskChange(
+              task,
+              changedSubtask.id,
+              changedSubtask.status,
+              updates.subtasks
+            );
+          }
+
           updates.subtasks.forEach(step => {
             const oldStep = task.subtasks.find(os => os.id === step.id);
             if (oldStep && oldStep.status !== step.status) {
@@ -131,7 +243,7 @@ export default function App() {
             const nextMember = nextPending ? teamMembers.find(m => m.id === nextPending.assignedMemberId) : null;
             
             const newNotif: AppNotification = {
-              id: `notif-${Date.now()}`,
+              id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
               taskId: task.id,
               projectId: task.projectId,
               subtaskId: nextPending?.id,
@@ -156,6 +268,8 @@ export default function App() {
             }
           }
         }
+
+        const updated = { ...task, ...updates, status: computedStatus };
 
         // 2. Whole task completed web notification
         if (updates.status === 'completed' && task.status !== 'completed') {
@@ -226,7 +340,7 @@ export default function App() {
     const assignee = teamMembers.find(m => m.id === (firstSubtask?.assignedMemberId || newTask.assignedMemberId));
 
     const notif: AppNotification = {
-      id: `notif-${Date.now()}`,
+      id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       taskId: newTask.id,
       projectId: newTask.projectId,
       subtaskId: firstSubtask?.id,
@@ -268,15 +382,133 @@ export default function App() {
     setTeamMembers(prev => [...prev, newMember]);
   };
 
-  // Reset to default mock data
-  const handleResetData = () => {
-    if (window.confirm('هل تريد إعادة تعيين بيانات المشاريع والمهام التوضيحية لشركات المقاولات إلى الحالة الافتراضية؟')) {
-      setProjects(INITIAL_PROJECTS);
-      setTasks(INITIAL_TASKS);
-      setTeamMembers(INITIAL_MEMBERS);
-      setNotifications(INITIAL_NOTIFICATIONS);
-      localStorage.clear();
+  // Update Team Member Handler
+  const handleUpdateTeamMember = (memberId: string, updates: Partial<TeamMember>) => {
+    setTeamMembers(prev => prev.map(m => m.id === memberId ? { ...m, ...updates } : m));
+  };
+
+  // Delete Team Member Handler
+  const handleDeleteTeamMember = (memberId: string) => {
+    setTeamMembers(prev => prev.filter(m => m.id !== memberId));
+  };
+
+  // Bulk Import Tasks & Projects Handler (from Excel / Google Sheets)
+  const handleImportTasksAndProjects = (newTasks: Task[], newProjects: Project[]) => {
+    if (newProjects.length > 0) {
+      setProjects(prev => [...prev, ...newProjects]);
     }
+    if (newTasks.length > 0) {
+      setTasks(prev => [...newTasks, ...prev]);
+    }
+  };
+
+  // Complete 3-Sheet Database Import Handler (Projects + Team Members + Tasks)
+  const handleImportDatabase = ({
+    projects: newProjects,
+    teamMembers: newMembers,
+    tasks: newTasks,
+    mode,
+  }: {
+    projects: Project[];
+    teamMembers: TeamMember[];
+    tasks: Task[];
+    mode: 'merge' | 'replace';
+  }) => {
+    if (mode === 'replace') {
+      if (newProjects.length > 0) setProjects(newProjects);
+      if (newMembers.length > 0) setTeamMembers(newMembers);
+      if (newTasks.length > 0) setTasks(newTasks);
+      setSelectedProjectId('all');
+
+      try {
+        if (newProjects.length > 0) localStorage.setItem('bunyan_projects', JSON.stringify(newProjects));
+        if (newMembers.length > 0) localStorage.setItem('bunyan_team', JSON.stringify(newMembers));
+        if (newTasks.length > 0) localStorage.setItem('bunyan_tasks', JSON.stringify(newTasks));
+      } catch (e) {
+        console.error('Failed to sync to localStorage', e);
+      }
+    } else {
+      // Merge mode
+      if (newProjects.length > 0) {
+        setProjects(prev => {
+          const map = new Map(prev.map(p => [p.id, p]));
+          newProjects.forEach(p => map.set(p.id, p));
+          const res = Array.from(map.values());
+          try { localStorage.setItem('bunyan_projects', JSON.stringify(res)); } catch {}
+          return res;
+        });
+      }
+      if (newMembers.length > 0) {
+        setTeamMembers(prev => {
+          const map = new Map(prev.map(m => [m.id, m]));
+          newMembers.forEach(m => map.set(m.id, m));
+          const res = Array.from(map.values());
+          try { localStorage.setItem('bunyan_team', JSON.stringify(res)); } catch {}
+          return res;
+        });
+      }
+      if (newTasks.length > 0) {
+        setTasks(prev => {
+          const map = new Map(prev.map(t => [t.id, t]));
+          newTasks.forEach(t => map.set(t.id, t));
+          const res = Array.from(map.values());
+          try { localStorage.setItem('bunyan_tasks', JSON.stringify(res)); } catch {}
+          return res;
+        });
+      }
+    }
+  };
+
+  // Reset to default mock data (clearing projects, tasks, team, notifications and restoring default)
+  const handleResetData = () => {
+    setProjects(INITIAL_PROJECTS);
+    setTasks(INITIAL_TASKS);
+    setTeamMembers(INITIAL_MEMBERS);
+    setNotifications(INITIAL_NOTIFICATIONS);
+    try {
+      const pw = localStorage.getItem('bunyan_reset_password');
+      localStorage.clear();
+      if (pw) localStorage.setItem('bunyan_reset_password', pw);
+    } catch (e) {
+      console.error('Failed to clear localStorage', e);
+    }
+
+    fetch('/api/company-data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projects: INITIAL_PROJECTS,
+        tasks: INITIAL_TASKS,
+        teamMembers: INITIAL_MEMBERS,
+        notifications: INITIAL_NOTIFICATIONS,
+        whatsappTemplate: customWhatsAppTemplate,
+      }),
+    }).catch(() => {});
+  };
+
+  // Clean fresh start: clears demo projects and tasks for personal real testing
+  const handleClearDemoData = () => {
+    setProjects([]);
+    setTasks([]);
+    setSelectedProjectId('all');
+    try {
+      localStorage.removeItem('bunyan_projects');
+      localStorage.removeItem('bunyan_tasks');
+    } catch (e) {
+      console.error('Failed to clear demo data', e);
+    }
+
+    fetch('/api/company-data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projects: [],
+        tasks: [],
+        teamMembers,
+        notifications,
+        whatsappTemplate: customWhatsAppTemplate,
+      }),
+    }).catch(() => {});
   };
 
   // Backup JSON Export Handler for Project Manager
@@ -294,7 +526,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-stone-100 text-stone-900 flex flex-col font-sans">
+    <div className="min-h-screen bg-[#0b141a] text-slate-100 flex flex-col font-sans">
       
       {/* Top Main Navigation Header */}
       <Navbar
@@ -306,6 +538,7 @@ export default function App() {
         }}
         onOpenNotifications={() => setIsNotificationsOpen(true)}
         onOpenAdvice={() => setIsAdviceOpen(true)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
         onExportBackup={handleExportBackup}
         onOpenGoogleSheets={() => setIsGoogleSheetsOpen(true)}
         notifications={notifications}
@@ -330,6 +563,7 @@ export default function App() {
               setIsCreateTaskOpen(true);
             }}
             onOpenCreateProject={() => setIsCreateProjectOpen(true)}
+            onOpenEditTask={(task) => setEditingTask(task)}
           />
         )}
 
@@ -351,6 +585,9 @@ export default function App() {
             }}
             onExportBackup={handleExportBackup}
             onOpenGoogleSheets={() => setIsGoogleSheetsOpen(true)}
+            onOpenEditTask={(task) => setEditingTask(task)}
+            onImportTasks={handleImportTasksAndProjects}
+            onImportDatabase={handleImportDatabase}
           />
         )}
 
@@ -380,6 +617,9 @@ export default function App() {
             tasks={tasks}
             projects={projects}
             onAddTeamMember={handleAddTeamMember}
+            onUpdateTeamMember={handleUpdateTeamMember}
+            onDeleteTeamMember={handleDeleteTeamMember}
+            customWhatsAppTemplate={customWhatsAppTemplate}
           />
         )}
 
@@ -400,6 +640,16 @@ export default function App() {
           handleCreateTask(newTask);
           setTargetDateForNewTask(undefined);
         }}
+      />
+
+      <EditTaskModal
+        isOpen={!!editingTask}
+        onClose={() => setEditingTask(null)}
+        task={editingTask}
+        projects={projects}
+        teamMembers={teamMembers}
+        onSave={handleUpdateTask}
+        onDelete={handleDeleteTask}
       />
 
       <CreateProjectModal
@@ -426,34 +676,36 @@ export default function App() {
         tasks={tasks}
       />
 
-      {/* Bottom Sticky Action / Footer Info */}
-      <footer className="bg-white border-t border-stone-200 py-4 px-4 sm:px-8 text-xs text-stone-500">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-stone-800">بُنيان للمقاولات</span>
-            <span>-</span>
-            <span>نظام سلاسل الخطوات المرنة والتنبيهات الميدانية الفورية</span>
-          </div>
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        onOpenAdvice={() => setIsAdviceOpen(true)}
+        onResetData={handleResetData}
+        onClearData={handleClearDemoData}
+        onExportBackup={handleExportBackup}
+        customWhatsAppTemplate={customWhatsAppTemplate}
+        onSaveWhatsAppTemplate={handleSaveWhatsAppTemplate}
+      />
 
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setIsAdviceOpen(true)}
-              className="text-amber-700 hover:text-amber-800 font-bold flex items-center gap-1 cursor-pointer"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>استشارة أفضل منصة تقنية</span>
-            </button>
-            <span>•</span>
-            <button
-              type="button"
-              onClick={handleResetData}
-              className="text-stone-400 hover:text-stone-700 flex items-center gap-1 cursor-pointer"
-              title="إعادة ضبط البيانات التجريبية"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>استعادة البيانات الافتراضية</span>
-            </button>
+      <GoogleSheetsModal
+        isOpen={isGoogleSheetsOpen}
+        onClose={() => setIsGoogleSheetsOpen(false)}
+        tasks={tasks}
+        projects={projects}
+        teamMembers={teamMembers}
+        onUpdateTask={handleUpdateTask}
+      />
+
+      {/* Clean Footer Info */}
+      <footer className="bg-[#0c1920] border-t border-[#162a34] py-3 px-4 sm:px-8 text-xs text-slate-400 mb-14 md:mb-0">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-center sm:text-right">
+          <div className="flex items-center gap-2 flex-wrap justify-center sm:justify-start">
+            <span className="font-bold text-white">بنيان للمقاولات - برمجة م.زياد مرعي 01030095004</span>
+            <span className="text-slate-600 hidden sm:inline">-</span>
+            <span className="text-slate-400">نظام سلاسل الخطوات المرنة والتنبيهات الميدانية الفورية</span>
+          </div>
+          <div className="text-[11px] text-slate-500">
+            جميع الحقوق محفوظة © {new Date().getFullYear()}
           </div>
         </div>
       </footer>

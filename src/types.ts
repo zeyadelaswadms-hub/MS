@@ -1,3 +1,5 @@
+export type MemberType = 'internal' | 'collaborator';
+
 export interface TeamMember {
   id: string;
   name: string;
@@ -5,6 +7,8 @@ export interface TeamMember {
   role: string;
   email?: string;
   avatarColor: string;
+  memberType?: MemberType; // 'internal' = فريق العمل بالشركة | 'collaborator' = جهات استشارية ومتعاونة
+  organization?: string; // e.g. "مكتب الاستشاري دار الرياض", "جهاز المدينة", "مقاول الأعمال الكهروميكانيكية"
 }
 
 export type SubTaskStatus = 'pending' | 'in_progress' | 'completed' | 'blocked';
@@ -17,6 +21,7 @@ export interface SubTask {
   assignedMemberId: string;
   status: SubTaskStatus;
   transitionNote?: string; // Text written on the connecting line to the next step
+  transitionStatus?: SubTaskStatus; // State of the intermediate transition step
   estimatedDays?: number;
   completedAt?: string;
   notes?: string;
@@ -27,6 +32,7 @@ export interface SubTask {
 }
 
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
+export type TaskStatus = 'not_started' | 'in_progress' | 'completed' | 'delayed';
 
 export interface Task {
   id: string;
@@ -39,7 +45,7 @@ export interface Task {
   expectedClosingDate?: string; // YYYY-MM-DD تاريخ إغلاق / تسليم المهمة
   createdAt: string;
   priority: TaskPriority;
-  status: 'not_started' | 'in_progress' | 'completed' | 'delayed';
+  status: TaskStatus;
   category?: string; // e.g. أعمال خرسانية، تشطيبات، تمديدات، استلامات
   externalLink?: string; // Google Sheets, Google Drive, drawings or document URL
   externalLinkLabel?: string; // Descriptive title e.g. "شيت الكميات والتكاليف" or "مجلد درايف للمخططات"
