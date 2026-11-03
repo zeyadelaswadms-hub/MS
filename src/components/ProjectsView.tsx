@@ -15,7 +15,9 @@ import {
   Briefcase, 
   Wallet,
   Sparkles,
-  Layers
+  Layers,
+  Edit3,
+  Trash2
 } from 'lucide-react';
 
 interface ProjectsViewProps {
@@ -29,6 +31,9 @@ interface ProjectsViewProps {
   onAddSubtask: (taskId: string) => void;
   onOpenCreateTask: (projectId?: string) => void;
   onOpenCreateProject: () => void;
+  onOpenProjectsManagement?: () => void;
+  onOpenEditProject?: (project: Project) => void;
+  onDeleteProject?: (projectId: string) => void;
 }
 
 export const ProjectsView: React.FC<ProjectsViewProps> = ({
@@ -42,6 +47,9 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   onAddSubtask,
   onOpenCreateTask,
   onOpenCreateProject,
+  onOpenProjectsManagement,
+  onOpenEditProject,
+  onDeleteProject,
 }) => {
   const currentProject = projects.find(p => p.id === selectedProjectId) || projects[0];
   const projectTasks = tasks.filter(t => t.projectId === currentProject?.id);
@@ -191,6 +199,32 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                     <Phone className="w-3.5 h-3.5" />
                   </a>
                 </div>
+              )}
+
+              {/* Edit Project Button */}
+              {onOpenEditProject && currentProject && (
+                <button
+                  type="button"
+                  onClick={() => onOpenEditProject(currentProject)}
+                  className="bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold px-3 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-1.5 border border-stone-300 transition cursor-pointer"
+                  title="تعديل بيانات المشروع"
+                >
+                  <Edit3 className="w-3.5 h-3.5 text-cyan-600" />
+                  <span>تعديل المشروع</span>
+                </button>
+              )}
+
+              {/* Delete Project Button */}
+              {onDeleteProject && currentProject && (
+                <button
+                  type="button"
+                  onClick={() => onDeleteProject(currentProject.id)}
+                  className="bg-red-50 hover:bg-red-100 text-red-700 font-bold px-3 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-1.5 border border-red-200 transition cursor-pointer"
+                  title="حذف هذا المشروع"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                  <span>حذف المشروع</span>
+                </button>
               )}
 
               <button

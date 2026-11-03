@@ -32,6 +32,11 @@ interface GoogleSheetsModalProps {
   projects: Project[];
   teamMembers: TeamMember[];
   onImportTasks?: (newTasks: Task[]) => void;
+  googleSheetUrl?: string;
+  onSyncGoogleSheet?: (url?: string) => Promise<void> | void;
+  lastSheetSyncTime?: string | null;
+  isSyncingSheet?: boolean;
+  onOpenSettings?: () => void;
 }
 
 export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
@@ -41,6 +46,11 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
   projects,
   teamMembers,
   onImportTasks,
+  googleSheetUrl,
+  onSyncGoogleSheet,
+  lastSheetSyncTime,
+  isSyncingSheet,
+  onOpenSettings,
 }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(false);
@@ -206,6 +216,66 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
               <span className="flex-1">{statusMessage.text}</span>
             </div>
           )}
+
+          {/* Section 0: Live Google Sheets Database (بدون تسجيل دخول إجباري) */}
+          <div className="bg-gradient-to-br from-emerald-900 to-teal-950 text-white rounded-2xl p-4 sm:p-5 border border-emerald-700/60 shadow-lg space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                <h3 className="text-xs sm:text-sm font-black text-emerald-200">
+                  قاعدة البيانات الثابتة لشيت المقاولات (Google Sheets Live)
+                </h3>
+              </div>
+              <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 px-2 py-0.5 rounded-full">
+                تحديث تلقائي كل ساعة ⚡
+              </span>
+            </div>
+
+            <p className="text-xs text-emerald-100/90 leading-relaxed">
+              تم تثبيت بيانات شيت المقاولات (المشاريع، المهام، وفريق العمل) كقاعدة بيانات دائمة للتطبيق. يتم التحديث التلقائي فور الاتصال بالإنترنت من الهاتف أو الكمبيوتر وكل ساعة دون اشتراط تسجيل الدخول بحساب Gmail.
+            </p>
+
+            <div className="bg-emerald-950/70 rounded-xl p-3 border border-emerald-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[11px] text-emerald-300 font-bold flex items-center gap-1.5">
+                  <span>آخر مزامنة ناجحة:</span>
+                  <span className="text-white font-mono bg-emerald-900/80 px-2 py-0.5 rounded">
+                    {lastSheetSyncTime || 'البيانات الافتراضية محملة'}
+                  </span>
+                </div>
+                {googleSheetUrl && (
+                  <p className="text-[10px] text-emerald-400/80 font-mono truncate max-w-xs mt-1" dir="ltr">
+                    {googleSheetUrl}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                {onSyncGoogleSheet && (
+                  <button
+                    type="button"
+                    onClick={() => onSyncGoogleSheet()}
+                    disabled={isSyncingSheet}
+                    className="bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-stone-950 px-3.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition cursor-pointer shadow-md disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isSyncingSheet ? 'animate-spin' : ''}`} />
+                    <span>{isSyncingSheet ? 'جارِ المزامنة...' : 'مزامنة الشيت الآن'}</span>
+                  </button>
+                )}
+
+                {onOpenSettings && (
+                  <button
+                    type="button"
+                    onClick={onOpenSettings}
+                    className="bg-white/10 hover:bg-white/20 text-white px-2.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer"
+                    title="تغيير رابط الشيت في الإعدادات"
+                  >
+                    تغيير الرابط ⚙️
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
 
           {/* Section 1: Google Account Connection Status */}
           <div className="bg-stone-50 rounded-2xl p-4 border border-stone-200/90 space-y-3">

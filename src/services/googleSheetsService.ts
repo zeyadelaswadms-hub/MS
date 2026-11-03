@@ -102,7 +102,6 @@ export async function exportTasksToGoogleSheets(
     body: JSON.stringify({
       properties: {
         title,
-        locale: 'ar',
         autoRecalc: 'ON_CHANGE',
       },
       sheets: [

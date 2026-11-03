@@ -22,6 +22,8 @@ import { TeamView } from './components/TeamView';
 import { CreateTaskModal } from './components/CreateTaskModal';
 import { EditTaskModal } from './components/EditTaskModal';
 import { CreateProjectModal } from './components/CreateProjectModal';
+import { EditProjectModal } from './components/EditProjectModal';
+import { ProjectsManagementModal } from './components/ProjectsManagementModal';
 import { NotificationsModal } from './components/NotificationsModal';
 import { PlatformAdviceModal } from './components/PlatformAdviceModal';
 import { GoogleSheetsModal } from './components/GoogleSheetsModal';
@@ -38,51 +40,53 @@ import {
 } from './utils/pipelineUtils';
 
 export default function App() {
-  // Local storage state initialization with fallbacks
+  // One-time cache migration: wipe all old local storage keys from previous demo/mock versions
+  if (typeof window !== 'undefined' && !localStorage.getItem('bunyan_strict_empty_v6')) {
+    try {
+      localStorage.removeItem('bunyan_projects');
+      localStorage.removeItem('bunyan_tasks');
+      localStorage.removeItem('bunyan_team');
+      localStorage.removeItem('bunyan_notifications');
+      localStorage.removeItem('bunyan_sheet_url');
+      localStorage.removeItem('bunyan_sheet_last_sync');
+      localStorage.setItem('bunyan_strict_empty_v6', 'true');
+    } catch {}
+  }
+
+  // Local storage state initialization (strictly empty by default - data loaded exclusively from Google Sheet)
   const [projects, setProjects] = useState<Project[]>(() => {
     try {
       const saved = localStorage.getItem('bunyan_projects');
-      return saved ? JSON.parse(saved) : INITIAL_PROJECTS;
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return INITIAL_PROJECTS;
+      return [];
     }
   });
 
   const [tasks, setTasks] = useState<Task[]>(() => {
     try {
       const saved = localStorage.getItem('bunyan_tasks');
-      return saved ? JSON.parse(saved) : INITIAL_TASKS;
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return INITIAL_TASKS;
+      return [];
     }
   });
 
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>(() => {
     try {
       const saved = localStorage.getItem('bunyan_team');
-      return saved ? JSON.parse(saved) : INITIAL_MEMBERS;
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return INITIAL_MEMBERS;
+      return [];
     }
   });
 
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
     try {
       const saved = localStorage.getItem('bunyan_notifications');
-      const raw: AppNotification[] = saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
-      const seen = new Set<string>();
-      const deduplicated: AppNotification[] = [];
-      raw.forEach((n, idx) => {
-        let id = n.id || `notif-${Date.now()}-${idx}`;
-        if (seen.has(id)) {
-          id = `${id}-${Math.random().toString(36).slice(2, 7)}`;
-        }
-        seen.add(id);
-        deduplicated.push({ ...n, id });
-      });
-      return deduplicated;
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return INITIAL_NOTIFICATIONS;
+      return [];
     }
   });
 
@@ -106,6 +110,21 @@ export default function App() {
   const [isAdviceOpen, setIsAdviceOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGoogleSheetsOpen, setIsGoogleSheetsOpen] = useState(false);
+  const [isProjectsManagementOpen, setIsProjectsManagementOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+
+  // Google Sheets Live Sync State (Cloud Database Connection)
+  const [googleSheetUrl, setGoogleSheetUrl] = useState<string>(() => {
+    return localStorage.getItem('bunyan_sheet_url') || '';
+  });
+  const [lastSheetSyncTime, setLastSheetSyncTime] = useState<string | null>(() => {
+    return localStorage.getItem('bunyan_sheet_last_sync') || null;
+  });
+  const [isSyncingSheet, setIsSyncingSheet] = useState(false);
+  const [autoSyncInterval, setAutoSyncInterval] = useState<number>(() => {
+    const saved = localStorage.getItem('bunyan_sheet_sync_interval');
+    return saved ? Number(saved) : 60;
+  });
 
   // Initialize Web Notifications & Service Worker on mount
   useEffect(() => {
@@ -119,16 +138,30 @@ export default function App() {
         const res = await fetch('/api/company-data');
         if (res.ok) {
           const data = await res.json();
-          if (data && Array.isArray(data.projects)) {
-            setProjects(data.projects);
+          if (data) {
+            setProjects(data.projects || []);
             setTasks(data.tasks || []);
-            setTeamMembers(data.teamMembers || INITIAL_MEMBERS);
+            setTeamMembers(data.teamMembers || []);
             if (data.notifications && Array.isArray(data.notifications)) {
               setNotifications(data.notifications);
             }
             if (data.whatsappTemplate) {
               setCustomWhatsAppTemplate(data.whatsappTemplate);
               localStorage.setItem('bunyan_whatsapp_template', data.whatsappTemplate);
+            }
+            if (data.googleSheetUrl) {
+              setGoogleSheetUrl(data.googleSheetUrl);
+              localStorage.setItem('bunyan_sheet_url', data.googleSheetUrl);
+            }
+            if (data.autoSyncInterval) {
+              setAutoSyncInterval(data.autoSyncInterval);
+              localStorage.setItem('bunyan_sheet_sync_interval', String(data.autoSyncInterval));
+            }
+            if (data.lastSync) {
+              const d = new Date(data.lastSync);
+              const fmt = `${d.toLocaleDateString('ar-EG')} ${d.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}`;
+              setLastSheetSyncTime(fmt);
+              localStorage.setItem('bunyan_sheet_last_sync', fmt);
             }
           }
         }
@@ -190,9 +223,103 @@ export default function App() {
         teamMembers,
         notifications,
         whatsappTemplate: template,
+        googleSheetUrl,
+        autoSyncInterval,
       }),
     }).catch(() => {});
   };
+
+  // Google Sheets Live Sync Handler (Fetches & updates all 3 sheets without requiring Gmail login)
+  const handleSyncWithGoogleSheet = async (targetUrl?: string, showToast: boolean = true) => {
+    const urlToUse = targetUrl || googleSheetUrl;
+    if (!urlToUse || urlToUse.trim() === '') return;
+
+    setIsSyncingSheet(true);
+    try {
+      const res = await fetch('/api/sync-google-sheet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: urlToUse }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'فشل الاتصال مع Google Sheets');
+      }
+
+      if (Array.isArray(data.projects)) {
+        setProjects(data.projects);
+        try { localStorage.setItem('bunyan_projects', JSON.stringify(data.projects)); } catch {}
+      }
+      if (Array.isArray(data.teamMembers)) {
+        setTeamMembers(data.teamMembers);
+        try { localStorage.setItem('bunyan_team', JSON.stringify(data.teamMembers)); } catch {}
+      }
+      if (Array.isArray(data.tasks)) {
+        setTasks(data.tasks);
+        try { localStorage.setItem('bunyan_tasks', JSON.stringify(data.tasks)); } catch {}
+      }
+
+      const d = new Date();
+      const timeStr = d.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+      const formatted = `اليوم ${timeStr}`;
+      setLastSheetSyncTime(formatted);
+      localStorage.setItem('bunyan_sheet_last_sync', formatted);
+
+      if (showToast) {
+        setBackupToast({
+          message: `تم تحديث البيانات من Google Sheets بنجاح (${data.stats?.tasksCount || data.tasks?.length} مهمة، ${data.stats?.projectsCount || data.projects?.length} مشاريع)`,
+          filename: 'Google Drive Sync Live',
+        });
+        setTimeout(() => setBackupToast(null), 4500);
+      }
+    } catch (err: any) {
+      console.error('Failed to sync sheet:', err);
+      if (showToast) {
+        setBackupToast({
+          message: err.message || 'تعذر الاتصال بـ Google Sheets',
+          filename: 'تأكد من إعدادات مشاركة الرابط',
+        });
+        setTimeout(() => setBackupToast(null), 5000);
+      }
+      throw err;
+    } finally {
+      setIsSyncingSheet(false);
+    }
+  };
+
+  const handleSaveGoogleSheetUrl = (url: string, interval: number) => {
+    setGoogleSheetUrl(url);
+    setAutoSyncInterval(interval);
+    localStorage.setItem('bunyan_sheet_url', url);
+    localStorage.setItem('bunyan_sheet_sync_interval', String(interval));
+    fetch('/api/sheet-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ googleSheetUrl: url, autoSyncInterval: interval }),
+    }).catch(() => {});
+  };
+
+  // Periodic Auto-Sync Timer (Every X minutes, default 60 min = 1 hour)
+  useEffect(() => {
+    if (autoSyncInterval <= 0) return;
+    const intervalMs = autoSyncInterval * 60 * 1000;
+    const timer = setInterval(() => {
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        handleSyncWithGoogleSheet(undefined, false);
+      }
+    }, intervalMs);
+    return () => clearInterval(timer);
+  }, [autoSyncInterval, googleSheetUrl]);
+
+  // Auto-sync whenever phone or PC reconnects to the Internet
+  useEffect(() => {
+    const handleOnline = () => {
+      handleSyncWithGoogleSheet(undefined, false);
+    };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [googleSheetUrl]);
 
   // Task Update Handler (with automatic Web Notifications & Sequential Pipeline logic)
   const handleUpdateTask = (taskId: string, updates: Partial<Task>) => {
@@ -368,9 +495,61 @@ export default function App() {
       ...newProjectData,
       id: `prj-${Date.now()}`,
     };
-    setProjects(prev => [...prev, newProj]);
+    setProjects(prev => {
+      const next = [...prev, newProj];
+      try { localStorage.setItem('bunyan_projects', JSON.stringify(next)); } catch {}
+      return next;
+    });
     setSelectedProjectId(newProj.id);
     setActiveTab('unified');
+  };
+
+  // Update Project Handler
+  const handleUpdateProject = (projectId: string, updates: Partial<Project>) => {
+    setProjects(prev => {
+      const next = prev.map(p => p.id === projectId ? { ...p, ...updates } : p);
+      try { localStorage.setItem('bunyan_projects', JSON.stringify(next)); } catch {}
+      return next;
+    });
+    if (editingProject && editingProject.id === projectId) {
+      setEditingProject(prev => prev ? { ...prev, ...updates } : null);
+    }
+  };
+
+  // Delete Project Handler
+  const handleDeleteProject = (projectId: string, deleteTasks: boolean = false) => {
+    const project = projects.find(p => p.id === projectId);
+    
+    // If deleteTasks was not explicitly chosen via modal, ask
+    if (!deleteTasks) {
+      const count = tasks.filter(t => t.projectId === projectId).length;
+      if (count > 0) {
+        const confirmMsg = window.confirm(`هل أنت متأكد من حذف مشروع "${project?.name || ''}" (${project?.code || ''}) وكافة بياناته؟`);
+        if (!confirmMsg) return;
+      }
+    }
+
+    setProjects(prev => {
+      const next = prev.filter(p => p.id !== projectId);
+      try { localStorage.setItem('bunyan_projects', JSON.stringify(next)); } catch {}
+      return next;
+    });
+
+    if (deleteTasks) {
+      setTasks(prev => {
+        const next = prev.filter(t => t.projectId !== projectId);
+        try { localStorage.setItem('bunyan_tasks', JSON.stringify(next)); } catch {}
+        return next;
+      });
+    }
+
+    if (selectedProjectId === projectId) {
+      setSelectedProjectId('all');
+    }
+
+    if (editingProject?.id === projectId) {
+      setEditingProject(null);
+    }
   };
 
   // Add Team Member Handler
@@ -459,16 +638,25 @@ export default function App() {
     }
   };
 
-  // Reset to default mock data (clearing projects, tasks, team, notifications and restoring default)
-  const handleResetData = () => {
-    setProjects(INITIAL_PROJECTS);
-    setTasks(INITIAL_TASKS);
-    setTeamMembers(INITIAL_MEMBERS);
-    setNotifications(INITIAL_NOTIFICATIONS);
+  // Reset Data: Syncs directly from Google Sheets or resets to empty
+  const handleResetData = async () => {
+    if (googleSheetUrl) {
+      try {
+        await handleSyncWithGoogleSheet(googleSheetUrl);
+        return;
+      } catch (e) {
+        console.warn('Sync failed during reset, clearing to empty:', e);
+      }
+    }
+    setProjects([]);
+    setTasks([]);
+    setTeamMembers([]);
+    setNotifications([]);
     try {
-      const pw = localStorage.getItem('bunyan_reset_password');
-      localStorage.clear();
-      if (pw) localStorage.setItem('bunyan_reset_password', pw);
+      localStorage.removeItem('bunyan_projects');
+      localStorage.removeItem('bunyan_tasks');
+      localStorage.removeItem('bunyan_team');
+      localStorage.removeItem('bunyan_notifications');
     } catch (e) {
       console.error('Failed to clear localStorage', e);
     }
@@ -477,25 +665,31 @@ export default function App() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        projects: INITIAL_PROJECTS,
-        tasks: INITIAL_TASKS,
-        teamMembers: INITIAL_MEMBERS,
-        notifications: INITIAL_NOTIFICATIONS,
+        projects: [],
+        tasks: [],
+        teamMembers: [],
+        notifications: [],
         whatsappTemplate: customWhatsAppTemplate,
+        googleSheetUrl,
+        autoSyncInterval,
       }),
     }).catch(() => {});
   };
 
-  // Clean fresh start: clears demo projects and tasks for personal real testing
+  // Clean fresh start: clears all projects and tasks to 100% empty state (exclusively awaits Sheet)
   const handleClearDemoData = () => {
     setProjects([]);
     setTasks([]);
+    setTeamMembers([]);
+    setNotifications([]);
     setSelectedProjectId('all');
     try {
       localStorage.removeItem('bunyan_projects');
       localStorage.removeItem('bunyan_tasks');
+      localStorage.removeItem('bunyan_team');
+      localStorage.removeItem('bunyan_notifications');
     } catch (e) {
-      console.error('Failed to clear demo data', e);
+      console.error('Failed to clear data', e);
     }
 
     fetch('/api/company-data', {
@@ -504,11 +698,19 @@ export default function App() {
       body: JSON.stringify({
         projects: [],
         tasks: [],
-        teamMembers,
-        notifications,
+        teamMembers: [],
+        notifications: [],
         whatsappTemplate: customWhatsAppTemplate,
+        googleSheetUrl,
+        autoSyncInterval,
       }),
     }).catch(() => {});
+
+    setBackupToast({
+      message: 'تم تفريغ كافة البيانات بالكامل، والبرنامج فارغ بانتظار الاستيراد من الشيت',
+      filename: 'بيانات فارغة',
+    });
+    setTimeout(() => setBackupToast(null), 4000);
   };
 
   // Backup JSON Export Handler for Project Manager
@@ -564,6 +766,9 @@ export default function App() {
             }}
             onOpenCreateProject={() => setIsCreateProjectOpen(true)}
             onOpenEditTask={(task) => setEditingTask(task)}
+            onOpenProjectsManagement={() => setIsProjectsManagementOpen(true)}
+            onOpenEditProject={(p) => setEditingProject(p)}
+            onDeleteProject={(id) => handleDeleteProject(id)}
           />
         )}
 
@@ -588,6 +793,8 @@ export default function App() {
             onOpenEditTask={(task) => setEditingTask(task)}
             onImportTasks={handleImportTasksAndProjects}
             onImportDatabase={handleImportDatabase}
+            onOpenProjectsManagement={() => setIsProjectsManagementOpen(true)}
+            onOpenEditProject={(p) => setEditingProject(p)}
           />
         )}
 
@@ -685,6 +892,20 @@ export default function App() {
         onExportBackup={handleExportBackup}
         customWhatsAppTemplate={customWhatsAppTemplate}
         onSaveWhatsAppTemplate={handleSaveWhatsAppTemplate}
+        onOpenProjectsManagement={() => {
+          setIsSettingsOpen(false);
+          setIsProjectsManagementOpen(true);
+        }}
+        googleSheetUrl={googleSheetUrl}
+        onSaveGoogleSheetUrl={handleSaveGoogleSheetUrl}
+        onSyncGoogleSheet={handleSyncWithGoogleSheet}
+        lastSheetSyncTime={lastSheetSyncTime}
+        isSyncingSheet={isSyncingSheet}
+        autoSyncInterval={autoSyncInterval}
+        onOpenGoogleSheetsModal={() => {
+          setIsSettingsOpen(false);
+          setIsGoogleSheetsOpen(true);
+        }}
       />
 
       <GoogleSheetsModal
@@ -693,7 +914,50 @@ export default function App() {
         tasks={tasks}
         projects={projects}
         teamMembers={teamMembers}
-        onUpdateTask={handleUpdateTask}
+        googleSheetUrl={googleSheetUrl}
+        onSyncGoogleSheet={handleSyncWithGoogleSheet}
+        lastSheetSyncTime={lastSheetSyncTime}
+        isSyncingSheet={isSyncingSheet}
+        onOpenSettings={() => {
+          setIsGoogleSheetsOpen(false);
+          setIsSettingsOpen(true);
+        }}
+        onImportTasks={(importedTasks) => {
+          setTasks(importedTasks);
+          try { localStorage.setItem('bunyan_tasks', JSON.stringify(importedTasks)); } catch {}
+        }}
+      />
+
+      {/* Edit Project Modal */}
+      <EditProjectModal
+        isOpen={!!editingProject}
+        project={editingProject}
+        onClose={() => setEditingProject(null)}
+        teamMembers={teamMembers}
+        tasksCount={editingProject ? tasks.filter(t => t.projectId === editingProject.id).length : 0}
+        onUpdateProject={handleUpdateProject}
+        onDeleteProject={handleDeleteProject}
+      />
+
+      {/* Projects Directory & Management Modal */}
+      <ProjectsManagementModal
+        isOpen={isProjectsManagementOpen}
+        onClose={() => setIsProjectsManagementOpen(false)}
+        projects={projects}
+        tasks={tasks}
+        teamMembers={teamMembers}
+        onOpenCreateProject={() => {
+          setIsProjectsManagementOpen(false);
+          setIsCreateProjectOpen(true);
+        }}
+        onOpenEditProject={(p) => {
+          setEditingProject(p);
+        }}
+        onDeleteProject={(id) => handleDeleteProject(id)}
+        onSelectProjectAndFilter={(projId) => {
+          setSelectedProjectId(projId);
+          setActiveTab('unified');
+        }}
       />
 
       {/* Clean Footer Info */}

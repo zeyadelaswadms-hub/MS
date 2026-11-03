@@ -59,6 +59,9 @@ interface UnifiedProjectsTasksViewProps {
   onOpenCreateTask: (projectId?: string) => void;
   onOpenCreateProject: () => void;
   onOpenEditTask?: (task: Task) => void;
+  onOpenProjectsManagement?: () => void;
+  onOpenEditProject?: (project: Project) => void;
+  onDeleteProject?: (projectId: string) => void;
 }
 
 export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> = ({
@@ -73,6 +76,9 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
   onOpenCreateTask,
   onOpenCreateProject,
   onOpenEditTask,
+  onOpenProjectsManagement,
+  onOpenEditProject,
+  onDeleteProject,
 }) => {
   // Multi-project selection state (allows selecting multiple projects at once or 'all')
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>(
@@ -516,7 +522,7 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
           </h2>
         </div>
 
-        {/* السطر الثاني: خانات إضافة مهمة وإضافة مشروع في سطر منفصل أسفل العنوان */}
+        {/* السطر الثاني: خانات إضافة مهمة وإضافة مشروع وقائمة المشاريع */}
         <div className="flex flex-wrap items-center gap-2.5 pt-0.5">
           <button
             type="button"
@@ -539,11 +545,37 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
             <Plus className="w-3.5 h-3.5 stroke-[3]" />
             <span>+ إضافة مشروع</span>
           </button>
+
+          {/* زر قائمة وإدارة المشاريع (عرض كامل للتعديل والحذف) */}
+          {onOpenProjectsManagement && (
+            <button
+              type="button"
+              id="quick-manage-projects-btn"
+              onClick={onOpenProjectsManagement}
+              className="px-3.5 py-1.5 bg-[#142833] hover:bg-[#1c3848] active:scale-95 text-[#22d3ee] text-xs font-bold rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1.5 shrink-0 border border-[#22404e] hover:border-cyan-400/60"
+              title="عرض وتعديل وحذف قائمة المشاريع"
+            >
+              <Layers className="w-3.5 h-3.5 text-cyan-400" />
+              <span>قائمة وإدارة المشاريع ({projects.length})</span>
+            </button>
+          )}
         </div>
 
         {/* Project Selection Chips (Multi-select and Single-click) */}
         <div className="pt-2 border-t border-[#1b3440] flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
-          <span className="text-[11px] font-bold text-slate-400 shrink-0">المشاريع:</span>
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="text-[11px] font-bold text-slate-400">المشاريع:</span>
+            {onOpenProjectsManagement && (
+              <button
+                type="button"
+                onClick={onOpenProjectsManagement}
+                className="text-[10px] text-cyan-400 hover:text-cyan-200 underline font-semibold cursor-pointer"
+                title="فتح جدول وقائمة المشاريع"
+              >
+                (إدارة ⚙️)
+              </button>
+            )}
+          </div>
           
           {/* 'All Projects' Chip */}
           <button
@@ -569,30 +601,45 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
             const projectTaskCount = tasks.filter(t => t.projectId === project.id).length;
             
             return (
-              <button
-                key={project.id}
-                type="button"
-                onClick={(e) => handleToggleProject(project.id, e)}
-                title="اضغط للاختيار، أو استخدم Ctrl/Shift للاختيار المتعدد"
-                className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shrink-0 cursor-pointer border ${
-                  isSelected
-                    ? 'bg-[#0e3b43] text-cyan-200 border-cyan-500/60 ring-1 ring-cyan-400/40'
-                    : 'bg-[#182c35] hover:bg-[#203a46] text-slate-300 border-[#22404e]'
-                }`}
-              >
-                <span className={`w-2 h-2 rounded-full ${project.color || 'bg-cyan-500'}`}></span>
-                <span>{project.name}</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                  isSelected ? 'bg-[#088395] text-white' : 'bg-[#101c22] text-slate-400'
-                }`}>
-                  {projectTaskCount}
-                </span>
-              </button>
+              <div key={project.id} className="relative flex items-center shrink-0">
+                <button
+                  type="button"
+                  onClick={(e) => handleToggleProject(project.id, e)}
+                  title="اضغط للاختيار، أو استخدم Ctrl/Shift للاختيار المتعدد"
+                  className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer border ${
+                    isSelected
+                      ? 'bg-[#0e3b43] text-cyan-200 border-cyan-500/60 ring-1 ring-cyan-400/40 pl-1.5'
+                      : 'bg-[#182c35] hover:bg-[#203a46] text-slate-300 border-[#22404e]'
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${project.color || 'bg-cyan-500'}`}></span>
+                  <span>{project.name}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                    isSelected ? 'bg-[#088395] text-white' : 'bg-[#101c22] text-slate-400'
+                  }`}>
+                    {projectTaskCount}
+                  </span>
+                  {isSelected && onOpenEditProject && (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenEditProject(project);
+                      }}
+                      className="p-1 hover:bg-white/20 rounded text-cyan-200 hover:text-white transition cursor-pointer"
+                      title="تعديل هذا المشروع"
+                    >
+                      <Edit3 className="w-3 h-3" />
+                    </span>
+                  )}
+                </button>
+              </div>
             );
           })}
         </div>
 
-        {/* If a single project is selected, show its clean summary banner */}
+        {/* If a single project is selected, show its clean summary banner with Edit & Delete */}
         {singleSelectedProject && (
           <div className="mt-2 p-3 bg-[#182c35] rounded-xl border border-[#22404e] text-xs flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-4">
@@ -610,23 +657,41 @@ export const UnifiedProjectsTasksView: React.FC<UnifiedProjectsTasksViewProps> =
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Edit Project Button */}
+              {onOpenEditProject && (
+                <button
+                  type="button"
+                  onClick={() => onOpenEditProject(singleSelectedProject)}
+                  className="text-[11px] font-bold text-white bg-[#101c22] hover:bg-[#142833] border border-cyan-400/40 px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                  title="تعديل بيانات هذا المشروع"
+                >
+                  <Edit3 className="w-3 h-3 text-[#22d3ee]" />
+                  <span>تعديل المشروع</span>
+                </button>
+              )}
+
+              {/* Delete Project Button */}
+              {onDeleteProject && (
+                <button
+                  type="button"
+                  onClick={() => onDeleteProject(singleSelectedProject.id)}
+                  className="text-[11px] font-bold text-rose-300 hover:text-white bg-[#261014] hover:bg-rose-900/60 border border-rose-900/40 px-2 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                  title="حذف هذا المشروع"
+                >
+                  <Trash2 className="w-3 h-3 text-rose-400" />
+                  <span>حذف المشروع</span>
+                </button>
+              )}
+
+              {/* Add Task for this project */}
               <button
                 type="button"
                 onClick={() => onOpenCreateTask(singleSelectedProject.id)}
-                className="text-[11px] font-bold text-cyan-200 hover:text-white bg-[#0e3b43] hover:bg-[#134e5a] border border-cyan-500/40 px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1"
+                className="text-[11px] font-bold text-cyan-200 hover:text-white bg-[#0e3b43] hover:bg-[#134e5a] border border-cyan-500/40 px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 shadow-2xs"
               >
                 <Plus className="w-3 h-3 stroke-[3]" />
                 <span>+ مهمة في {singleSelectedProject.code}</span>
-              </button>
-              <button
-                type="button"
-                onClick={onOpenCreateProject}
-                className="text-[11px] font-bold text-slate-300 hover:text-white bg-[#101c22] hover:bg-[#15252e] border border-[#22404e] px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1"
-                title="إضافة مشروع جديد"
-              >
-                <Plus className="w-3 h-3 stroke-[3]" />
-                <span>+ إضافة مشروع جديد</span>
               </button>
             </div>
           </div>

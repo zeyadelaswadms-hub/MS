@@ -16,7 +16,14 @@ import {
   Copy,
   Check,
   Share2,
-  ExternalLink
+  ExternalLink,
+  Layers,
+  Building2,
+  FileSpreadsheet,
+  RefreshCw,
+  Loader2,
+  Globe,
+  AlertTriangle
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -28,6 +35,14 @@ interface SettingsModalProps {
   onExportBackup?: () => void;
   customWhatsAppTemplate: string;
   onSaveWhatsAppTemplate: (template: string) => void;
+  onOpenProjectsManagement?: () => void;
+  googleSheetUrl: string;
+  onSaveGoogleSheetUrl: (url: string, autoSyncInterval: number) => void;
+  onSyncGoogleSheet: (url?: string) => Promise<void> | void;
+  lastSheetSyncTime?: string | null;
+  isSyncingSheet?: boolean;
+  autoSyncInterval?: number;
+  onOpenGoogleSheetsModal?: () => void;
 }
 
 export const DEFAULT_WHATSAPP_TEMPLATE = `سلام عليكم م. {name}
@@ -44,8 +59,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClearData,
   customWhatsAppTemplate,
   onSaveWhatsAppTemplate,
+  onOpenProjectsManagement,
+  googleSheetUrl,
+  onSaveGoogleSheetUrl,
+  onSyncGoogleSheet,
+  lastSheetSyncTime,
+  isSyncingSheet,
+  autoSyncInterval = 60,
+  onOpenGoogleSheetsModal,
 }) => {
-  const [activeTab, setActiveTab] = useState<'whatsapp' | 'android' | 'security' | 'advice'>('whatsapp');
+  const [activeTab, setActiveTab] = useState<'sheets' | 'whatsapp' | 'android' | 'security' | 'advice'>('sheets');
+  const [inputSheetUrl, setInputSheetUrl] = useState(googleSheetUrl || '');
+  const [selectedInterval, setSelectedInterval] = useState(autoSyncInterval || 60);
+  const [syncFeedback, setSyncFeedback] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   
   // Password state
   const [currentPassword, setCurrentPassword] = useState<string>(() => {
@@ -78,8 +104,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       setResetError(null);
       setShowPasswordSuccess(false);
       setTempWhatsAppTemplate(customWhatsAppTemplate);
+      setInputSheetUrl(googleSheetUrl || '');
+      setSelectedInterval(autoSyncInterval || 60);
+      setSyncFeedback(null);
     }
-  }, [isOpen, customWhatsAppTemplate]);
+  }, [isOpen, customWhatsAppTemplate, googleSheetUrl, autoSyncInterval]);
+
+  const handleSaveAndSyncSheet = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputSheetUrl.trim()) return;
+    setSyncFeedback(null);
+    try {
+      onSaveGoogleSheetUrl(inputSheetUrl.trim(), selectedInterval);
+      await onSyncGoogleSheet(inputSheetUrl.trim());
+      setSyncFeedback({ text: 'تم حفظ الرابط ومزامنة بيانات الشيت بنجاح!', type: 'success' });
+    } catch (err: any) {
+      setSyncFeedback({ text: err.message || 'فشل في مزامنة الشيت. تحقق من الرابط وإعدادات المشاركة.', type: 'error' });
+    }
+  };
 
   useEffect(() => {
     const handleBeforeInstall = (e: Event) => {
@@ -193,6 +235,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="flex items-center gap-1.5 p-2 bg-[#0d181e] border-b border-[#182c35] text-xs font-bold overflow-x-auto shrink-0">
           <button
             type="button"
+            onClick={() => setActiveTab('sheets')}
+            className={`px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+              activeTab === 'sheets' 
+                ? 'bg-emerald-600 text-white shadow-xs' 
+                : 'text-slate-400 hover:text-white hover:bg-[#152731]'
+            }`}
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-300" />
+            <span>ربط شيت Google وقاعدة البيانات</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab('whatsapp')}
             className={`px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
               activeTab === 'whatsapp' 
@@ -247,6 +302,165 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         {/* Modal Scrollable Body */}
         <div className="p-4 sm:p-6 space-y-4 text-xs overflow-y-auto flex-1">
           
+          {/* TAB 0: Google Sheets Cloud Database Sync */}
+          {activeTab === 'sheets' && (
+            <div className="space-y-4">
+              
+              {/* Main Sheet Connection Card */}
+              <div className="bg-[#101c22] border border-[#1b3440] rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-400 shrink-0">
+                    <FileSpreadsheet className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-white text-sm sm:text-base">
+                      ربط وتثبيت شيت Google كقاعدة بيانات حية
+                    </h3>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      ربط الشيت المباشر الذي يحتوي على المشاريع والمهام وفريق العمل مع التحديث التلقائي
+                    </p>
+                  </div>
+                </div>
+
+                {/* No Gmail Login Reassurance Banner */}
+                <div className="bg-[#0b171d] p-3.5 rounded-xl border border-cyan-500/30 text-xs text-slate-300 space-y-1.5">
+                  <div className="flex items-center gap-2 font-bold text-cyan-300">
+                    <CheckCircle2 className="w-4 h-4 text-[#22d3ee] shrink-0" />
+                    <span>لا يُشترط تسجيل الدخول بحساب Gmail:</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed pr-6">
+                    يكفي أن يكون رابط الشيت متاحاً للمشاهدة: <strong className="text-white">"أي شخص لديه الرابط يمكنه العرض" (Anyone with the link can view)</strong>، وسيتم قراءة وتحديث بيانات المهام والمشاريع والخطوات تلقائياً في ثوانٍ من الهاتف أو الكمبيوتر دون أي تسجيل دخول!
+                  </p>
+                </div>
+
+                {/* Form to change and sync sheet */}
+                <form onSubmit={handleSaveAndSyncSheet} className="space-y-3.5 pt-1">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1.5 flex flex-wrap items-center justify-between gap-1">
+                      <span>رابط ملف Google Sheets أو Google Drive:</span>
+                      {lastSheetSyncTime && (
+                        <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-950/80 px-2 py-0.5 rounded-md border border-emerald-700/50">
+                          آخر مزامنة ناجحة: {lastSheetSyncTime}
+                        </span>
+                      )}
+                    </label>
+                    <input
+                      type="url"
+                      dir="ltr"
+                      required
+                      value={inputSheetUrl}
+                      onChange={(e) => setInputSheetUrl(e.target.value)}
+                      placeholder="https://docs.google.com/spreadsheets/d/.../edit"
+                      className="w-full bg-[#182c35] border border-[#234250] rounded-xl px-3.5 py-2 text-xs font-mono text-cyan-200 outline-none focus:border-[#22d3ee] placeholder-slate-500"
+                    />
+                    <div className="flex items-center justify-between text-[10px] text-slate-400 mt-1">
+                      <span>يدعم الشيتات التي تحتوي على 3 صفحات: (المشاريع، فريق العمل، المهام) أو الشيت الفردي.</span>
+                    </div>
+                  </div>
+
+                  {/* Sync frequency options */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                        دورية التحديث التلقائي للبيانات:
+                      </label>
+                      <select
+                        value={selectedInterval}
+                        onChange={(e) => setSelectedInterval(Number(e.target.value))}
+                        className="w-full bg-[#182c35] border border-[#234250] rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-[#22d3ee]"
+                      >
+                        <option value={60} className="bg-[#132229]">كل 1 ساعة (تلقائياً - موصى به)</option>
+                        <option value={30} className="bg-[#132229]">كل 30 دقيقة</option>
+                        <option value={15} className="bg-[#132229]">كل 15 دقيقة</option>
+                        <option value={0} className="bg-[#132229]">يدوياً وعبر الأزرار فقط</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                        المزامنة التلقائية عند عودة الإنترنت:
+                      </label>
+                      <div className="bg-[#182c35] border border-[#234250] rounded-xl px-3 py-2 text-xs text-emerald-300 flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                        <span className="font-semibold">مفعلة للموبايل والكمبيوتر عند توفر اتصال</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex flex-wrap items-center gap-2.5 pt-2">
+                    <button
+                      type="submit"
+                      disabled={isSyncingSheet || !inputSheetUrl.trim()}
+                      className="flex-1 sm:flex-none px-5 py-2.5 bg-[#088395] hover:bg-[#0aa0b6] disabled:opacity-50 text-white font-bold rounded-xl text-xs sm:text-sm transition cursor-pointer flex items-center justify-center gap-2 shadow-md border border-cyan-400/30"
+                    >
+                      {isSyncingSheet ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin text-white" />
+                          <span>جاري قراءة وتحديث البيانات من الشيت...</span>
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="w-4 h-4" />
+                          <span>حفظ الرابط ومزامنة الشيت الآن 🔄</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Feedback toast */}
+                  {syncFeedback && (
+                    <div className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2.5 animate-fadeIn ${
+                      syncFeedback.type === 'success' 
+                        ? 'bg-emerald-950/80 text-emerald-200 border border-emerald-500/40' 
+                        : 'bg-rose-950/80 text-rose-200 border border-rose-500/40'
+                    }`}>
+                      {syncFeedback.type === 'success' ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      ) : (
+                        <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                      )}
+                      <span>{syncFeedback.text}</span>
+                    </div>
+                  )}
+
+                </form>
+              </div>
+
+              {/* Optional Advanced Google Login Card */}
+              <div className="bg-[#101c22] border border-[#1b3440] rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] bg-slate-800 text-slate-300 font-bold px-2 py-0.5 rounded">
+                      اختياري
+                    </span>
+                    <h4 className="font-bold text-white text-xs">
+                      تسجيل الدخول بحساب Google (اختياري)
+                    </h4>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    إذا كان الشيت خاصاً جداً ولا ترغب في مشاركة رابطه علنياً، يمكنك تسجيل الدخول بحساب Google الخاص بك لتفويض القراءة والكتابة المباشرة.
+                  </p>
+                </div>
+
+                {onOpenGoogleSheetsModal && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenGoogleSheetsModal();
+                    }}
+                    className="w-full sm:w-auto px-4 py-2 bg-[#182c35] hover:bg-[#203a46] text-cyan-200 hover:text-white border border-[#22404e] rounded-xl text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>لوحة Google Sheets</span>
+                  </button>
+                )}
+              </div>
+
+            </div>
+          )}
+
           {/* TAB 1: WhatsApp Message Customizer */}
           {activeTab === 'whatsapp' && (
             <div className="space-y-4">
@@ -427,6 +641,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* TAB 3: Security & Database Management */}
           {activeTab === 'security' && (
             <div className="space-y-4">
+              {/* Projects Directory & Management Quick Access */}
+              {onOpenProjectsManagement && (
+                <div className="bg-[#101c22] border border-[#1d3d4b] rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-[#088395]/20 border border-cyan-400/30 flex items-center justify-center text-[#22d3ee] shrink-0">
+                      <Layers className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-white text-xs sm:text-sm">قائمة ودليل مشاريع المقاولات</h4>
+                      <p className="text-[11px] text-slate-400">تعديل بيانات كافة المشاريع، نسب الإنجاز، وحذف المشاريع</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenProjectsManagement();
+                    }}
+                    className="w-full sm:w-auto px-4 py-2 bg-[#088395] hover:bg-[#0aa0b6] text-white font-bold rounded-xl text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shrink-0 shadow-xs"
+                  >
+                    <Building2 className="w-3.5 h-3.5" />
+                    <span>فتح قائمة المشاريع</span>
+                  </button>
+                </div>
+              )}
+
               {/* Admin Security Password Settings */}
               <div className="bg-[#101c22] border border-[#1b3440] rounded-2xl p-4 space-y-3">
                 <div className="flex items-center gap-2">

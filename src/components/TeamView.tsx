@@ -357,7 +357,14 @@ export const TeamView: React.FC<TeamViewProps> = ({
       )}
 
       {/* Team Members Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {filteredMembers.length === 0 ? (
+        <div className="bg-[#132229] rounded-2xl p-8 text-center border border-[#1b3440] text-slate-400 space-y-2">
+          <Users className="w-10 h-10 text-slate-500 mx-auto" />
+          <h3 className="text-sm font-bold text-white">لا يوجد أعضاء في فريق العمل حالياً</h3>
+          <p className="text-xs text-slate-400">يتم استيراد وتحميل أعضاء الفريق تلقائياً من شيت Google عند المزامنة، أو يمكنك إضافة عضو يدوياً أعلاه.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredMembers.map(member => {
           const isCollaborator = member.memberType === 'collaborator';
           
@@ -569,6 +576,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
           );
         })}
       </div>
+      )}
 
       {/* Edit Member Modal */}
       {editingMember && (

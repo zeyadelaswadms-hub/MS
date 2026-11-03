@@ -24,7 +24,8 @@ import {
   User, 
   X, 
   Download, 
-  LayoutGrid
+  LayoutGrid,
+  Layers
 } from 'lucide-react';
 import { EditExternalLinkModal } from './EditExternalLinkModal';
 import { ImageLightboxModal } from './ImageLightboxModal';
@@ -59,6 +60,8 @@ interface CompactGlanceViewProps {
     tasks: Task[];
     mode: 'merge' | 'replace';
   }) => void;
+  onOpenProjectsManagement?: () => void;
+  onOpenEditProject?: (project: Project) => void;
 }
 
 /**
@@ -263,6 +266,8 @@ export const CompactGlanceView: React.FC<CompactGlanceViewProps> = ({
   onOpenEditTask,
   onImportTasks,
   onImportDatabase,
+  onOpenProjectsManagement,
+  onOpenEditProject,
 }) => {
   const [downloadSuccessToast, setDownloadSuccessToast] = useState<string | null>(null);
 
@@ -598,6 +603,19 @@ export const CompactGlanceView: React.FC<CompactGlanceViewProps> = ({
           )}
 
           {/* Excel & Sheets Template & Bulk Import Button */}
+          {onOpenProjectsManagement && (
+            <button
+              type="button"
+              onClick={onOpenProjectsManagement}
+              className="flex items-center gap-1 text-[10px] sm:text-[11px] font-bold text-cyan-200 hover:text-white bg-[#142833] hover:bg-[#1a3544] border border-[#22404e] hover:border-cyan-400/50 px-2.5 py-1 rounded-lg transition cursor-pointer shadow-2xs active:scale-95"
+              title="عرض وتعديل وحذف قائمة المشاريع"
+            >
+              <Layers className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+              <span className="hidden sm:inline">قائمة المشاريع ({projects.length})</span>
+              <span className="sm:hidden">المشاريع</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => setIsExcelImportOpen(true)}
@@ -667,6 +685,19 @@ export const CompactGlanceView: React.FC<CompactGlanceViewProps> = ({
                     <option key={p.id} value={p.id} className="bg-[#132229] text-white">[{p.code}] {p.name}</option>
                   ))}
                 </select>
+                {selectedProjectId !== 'all' && onOpenEditProject && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const p = projects.find(proj => proj.id === selectedProjectId);
+                      if (p) onOpenEditProject(p);
+                    }}
+                    className="p-0.5 text-cyan-300 hover:text-white rounded hover:bg-cyan-900/50 transition cursor-pointer"
+                    title="تعديل هذا المشروع"
+                  >
+                    <Edit3 className="w-3 h-3" />
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -748,11 +779,45 @@ export const CompactGlanceView: React.FC<CompactGlanceViewProps> = ({
       */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-2.5">
         {filteredTasks.length === 0 ? (
-          <div className="md:col-span-2 bg-[#132229] rounded-2xl p-6 text-center border border-[#1b3440] text-slate-400 space-y-1.5">
-            <CheckCircle2 className="w-8 h-8 mx-auto text-emerald-400" />
-            <p className="text-xs font-bold text-slate-200">
-              لا توجد مهام مطابقة للفلتر المحدد
-            </p>
+          <div className="md:col-span-2 bg-[#132229] rounded-2xl p-6 sm:p-8 text-center border border-[#1b3440] text-slate-400 space-y-3">
+            {tasks.length === 0 ? (
+              <>
+                <FileSpreadsheet className="w-10 h-10 mx-auto text-emerald-400" />
+                <h3 className="text-sm sm:text-base font-black text-white">
+                  البرنامج خالٍ من أي بيانات افتراضية
+                </h3>
+                <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed">
+                  تم ضبط التطبيق ليعمل حصرياً وفقط من خلال بيانات الشيت. يمكنك استيراد ملف الشيت أو ربط رابط Google Sheets للبدء في عرض المهام وفريق العمل والمشاريع.
+                </p>
+                <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsExcelImportOpen(true)}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5"
+                  >
+                    <FileSpreadsheet className="w-4 h-4" />
+                    <span>استيراد ملف الشيت (Excel / CSV) 📥</span>
+                  </button>
+                  {onOpenGoogleSheets && (
+                    <button
+                      type="button"
+                      onClick={onOpenGoogleSheets}
+                      className="px-4 py-2 bg-[#182c35] hover:bg-[#203a46] text-emerald-300 font-bold text-xs rounded-xl border border-emerald-500/40 transition cursor-pointer flex items-center gap-1.5"
+                    >
+                      <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                      <span>ربط ومزامنة رابط Google Sheets 🔄</span>
+                    </button>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="w-8 h-8 mx-auto text-emerald-400" />
+                <p className="text-xs font-bold text-slate-200">
+                  لا توجد مهام مطابقة للفلتر المحدد
+                </p>
+              </>
+            )}
           </div>
         ) : (
           filteredTasks.map(task => {
